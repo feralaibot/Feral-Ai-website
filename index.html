@@ -7,52 +7,21 @@
     <link rel="stylesheet" href="style.css">
     <script defer src="glitch.js"></script>
     <style>
-        /* Modal styling */
-        .modal {
-            display: block;
-            position: fixed;
-            z-index: 9999;
-            padding-top: 100px;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-            background-color: rgba(0, 0, 0, 0.95);
-        }
-        .modal-content {
-            background-color: #000;
-            color: #0f0;
-            margin: auto;
-            padding: 20px;
-            border: 1px solid #0f0;
-            width: 80%;
-            max-width: 500px;
-            font-family: monospace;
+        .disclaimer-banner {
+            background: black;
+            color: red;
             text-align: center;
-        }
-        .close-btn {
-            color: #0f0;
-            font-size: 20px;
-            margin-top: 20px;
-            cursor: pointer;
-            background: transparent;
-            border: 1px solid #0f0;
-            padding: 10px 20px;
+            font-family: monospace;
+            padding: 10px;
+            font-weight: bold;
+            border: 1px solid red;
         }
     </style>
-    <script>
-        function closeModal() {
-            document.getElementById('disclaimerModal').style.display = 'none';
-        }
-    </script>
 </head>
 <body>
-    <div id="disclaimerModal" class="modal">
-        <div class="modal-content">
-            <h2 style="color: red;">WARNING: THIS PROJECT IS UNHINGED</h2>
-            <p style="color: red;">FERAL AI and $FANG are vulgar, offensive, and proudly degen...</p>
-        </div>
+    <!-- Static disclaimer banner -->
+    <div class="disclaimer-banner">
+        WARNING: THIS PROJECT IS UNHINGED – FERAL AI and $FANG are vulgar, offensive, and proudly degen...
     </div>
 
     <div class="terminal">
@@ -62,7 +31,7 @@
         <p>> EXECUTING /FANG_PROTOCOL</p>
     </div>
 
-    <div class="content hidden">
+    <div class="content">
         <header>
             <img src="fang_logo_transparent.png" alt="FANG Logo" class="logo">
             <nav>
