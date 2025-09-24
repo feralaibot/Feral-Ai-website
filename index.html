@@ -13,6 +13,86 @@
       border: 1px solid #f33;
     }
   </style>
+
+  <!-- ⬇⬇⬇ ADDED: FANG bubbly buttons (no markup changes needed) ⬇⬇⬇ -->
+  <style id="fang-bubbly-buttons">
+    :root{
+      --fang-primary:#33ffa8;
+      --fang-primary-2:#00d4ff;
+      --fang-dark:#0b0e12;
+      --fang-text:#e6f0ff;
+    }
+
+    /* Target your existing nav buttons (and keep generics compatible) */
+    .nav-button,
+    button, .button, .btn, .cta, a.button, a.btn, .cta a{
+      appearance:none; border:none; text-decoration:none; cursor:pointer;
+      font-weight:700; border-radius:999px; padding:.9rem 1.25rem; line-height:1;
+      display:inline-flex; align-items:center; gap:.65rem;
+      color:var(--fang-dark);
+      background:linear-gradient(135deg, var(--fang-primary), var(--fang-primary-2));
+      box-shadow:
+        0 8px 24px rgba(0,0,0,.35),
+        0 0 0 2px rgba(255,255,255,.05) inset,
+        0 6px 0 rgba(0,0,0,.25);
+      transform:translateY(0);
+      transition:transform .12s ease, box-shadow .15s ease, filter .2s ease;
+      position:relative; overflow:hidden;
+    }
+
+    /* Glossy sheen */
+    .nav-button::before,
+    button::before, .button::before, .btn::before, .cta::before, a.button::before, a.btn::before, .cta a::before{
+      content:""; position:absolute; inset:-60% -40% auto auto; width:140%; height:200%;
+      background:radial-gradient(60% 40% at 30% 30%, rgba(255,255,255,.35), rgba(255,255,255,0) 60%);
+      transform:translateX(-120%) rotate(15deg); transition:transform .5s ease; pointer-events:none;
+    }
+
+    /* Hover lift + sheen slide */
+    .nav-button:hover,
+    button:hover, .button:hover, .btn:hover, .cta:hover, a.button:hover, a.btn:hover, .cta a:hover{
+      transform:translateY(-2px);
+      box-shadow:
+        0 14px 28px rgba(0,0,0,.45),
+        0 0 0 2px rgba(255,255,255,.06) inset,
+        0 10px 0 rgba(0,0,0,.22);
+      filter:saturate(1.15);
+    }
+    .nav-button:hover::before,
+    button:hover::before, .button:hover::before, .btn:hover::before, .cta:hover::before, a.button:hover::before, a.btn:hover::before, .cta a:hover::before{
+      transform:translateX(10%) rotate(15deg);
+    }
+
+    /* Press squish */
+    .nav-button:active,
+    button:active, .button:active, .btn:active, .cta:active, a.button:active, a.btn:active, .cta a:active{
+      transform:translateY(0) scale(.98);
+      box-shadow:
+        0 6px 16px rgba(0,0,0,.4),
+        0 0 0 2px rgba(255,255,255,.05) inset,
+        0 3px 0 rgba(0,0,0,.28);
+    }
+
+    /* Accessible focus ring */
+    .nav-button:focus-visible,
+    button:focus-visible, .button:focus-visible, .btn:focus-visible, .cta:focus-visible, a.button:focus-visible, a.btn:focus-visible, .cta a:focus-visible{
+      outline:none;
+      box-shadow:0 0 0 3px rgba(0,212,255,.55), 0 10px 0 rgba(0,0,0,.22);
+    }
+
+    /* Tiny bubble pops (optional) */
+    @keyframes bubble {
+      0% { transform:translate(var(--x,0),var(--y,0)) scale(0); opacity:.8; }
+      80%{ transform:translate(calc(var(--x,0)*1.3),calc(var(--y,0)*1.3)) scale(1); opacity:.25; }
+      100%{ transform:translate(calc(var(--x,0)*1.6),calc(var(--y,0)*1.6)) scale(1.2); opacity:0; }
+    }
+    .nav-button .bubble,
+    button .bubble, .button .bubble, .btn .bubble, .cta .bubble, a.button .bubble, a.btn .bubble{
+      position:absolute; width:10px; height:10px; border-radius:50%;
+      background:rgba(255,255,255,.6); pointer-events:none; animation:bubble .9s ease forwards; filter:blur(.5px);
+    }
+  </style>
+  <!-- ⬆⬆⬆ ADDED END ⬆⬆⬆ -->
 </head>
 <body>
   <!-- Static disclaimer banner -->
@@ -77,5 +157,24 @@
       <p><a href="lore.html" style="color:#0f0;">Read Full Lore &rarr;</a></p>
     </section>
   </div>
+
+  <!-- ⬇⬇⬇ ADDED: optional tiny JS for bubble pops on hover ⬇⬇⬇ -->
+  <script id="fang-bubbly-buttons-js">
+    document.addEventListener('pointerenter', (e) => {
+      const btn = e.target.closest('.nav-button, button, .button, .btn, .cta, a.button, a.btn');
+      if(!btn) return;
+      for(let i=0;i<3;i++){
+        const b = document.createElement('span');
+        b.className = 'bubble';
+        b.style.setProperty('--x', ((Math.random()*2-1)*24)+'px');
+        b.style.setProperty('--y', ((Math.random()*2-1)*12)+'px');
+        b.style.left = (e.offsetX)+'px';
+        b.style.top  = (e.offsetY)+'px';
+        btn.appendChild(b);
+        setTimeout(()=>b.remove(), 950);
+      }
+    }, true);
+  </script>
+  <!-- ⬆⬆⬆ ADDED END ⬆⬆⬆ -->
 </body>
 </html>
