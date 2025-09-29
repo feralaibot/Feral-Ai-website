@@ -14,16 +14,26 @@
       --neon4:#00ff6e; /* toxic green */
       --accent:#19c2ff; /* solana-ish */
     }
-    html,body{height:100%;margin:0;background:radial-gradient(1200px 800px at 70% 20%, #111 0%, #090c10 35%, #05060a 100%);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,"Helvetica Neue",Arial,sans-serif;color:var(--fg);}    
+    html,body{height:100%;margin:0;background:radial-gradient(1200px 800px at 70% 20%, #111 0%, #090c10 35%, #05060a 100%);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,"Helvetica Neue",Arial,sans-serif;color:var(--fg);}
     .wrap{position:fixed;inset:0;display:grid;grid-template-rows:auto 1fr auto}
     header,footer{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;gap:8px}
     header{color:#a7b3c2;letter-spacing:.08em;text-transform:uppercase;font-weight:700;font-size:12px}
     header .brand{display:flex;gap:10px;align-items:center}
     header .dot{width:8px;height:8px;border-radius:999px;background:linear-gradient(135deg,var(--neon2),var(--neon1));box-shadow:0 0 12px var(--neon2)}
     #game{position:relative;display:grid;place-items:center}
-    canvas{$1
-      touch-action:none; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none;}
-    
+
+    /* Canvas styling (restored + mobile-friendly) */
+    canvas{
+      width:min(100vw,900px);
+      height:calc(min(100vw,900px) * 0.6);
+      max-height:78vh;
+      border:1px solid rgba(255,255,255,.06);
+      background:linear-gradient(180deg, rgba(32,32,48,.35), rgba(6,8,14,.65));
+      box-shadow:0 0 30px rgba(0,255,213,.08), inset 0 0 40px rgba(138,43,226,.08);
+      border-radius:18px;
+      touch-action:none; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none;
+    }
+
     .hud{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between}
     .row{display:flex;gap:10px;align-items:center}
     .hud .top{display:flex;justify-content:space-between;padding:12px}
@@ -124,10 +134,34 @@
     let hi = parseInt(localStorage.getItem('fang_shred_hi')||'0',10); hiEl.textContent = hi;
 
     const targets = [];
+
+    // ---- SPRITE LOADER ----
+    const ASSET_PATH = 'assets/'; // images live in public/arcade/shred/assets/
+    const SPRITES = {
+      RUG:    ASSET_PATH + 'fang_rug.png',     // use .svg/.webp if that's what you uploaded
+      BOT:    ASSET_PATH + 'fang_bot.png',
+      CANDLE: ASSET_PATH + 'fang_candle.png',
+    };
+    const IMAGES = {};
+    function loadImage(src){
+      return new Promise((resolve, reject)=>{
+        const img = new Image();
+        img.onload = ()=>resolve(img);
+        img.onerror = reject;
+        img.src = src;
+      });
+    }
+    async function preloadSprites(){
+      for (const [key, src] of Object.entries(SPRITES)){
+        IMAGES[key] = await loadImage(src);
+      }
+    }
+
+    // Define kinds using sprites (r = click radius)
     const kinds = [
-      {name:'RUG',   color:'#ff004d', glow:'#ff004d', score:10, r:26},
-      {name:'BOT',   color:'#00ffd5', glow:'#00ffd5', score:20, r:28},
-      {name:'CANDLE',color:'#8a2be2', glow:'#8a2be2', score:30, r:30}
+      {name:'RUG',    score:10, r:30, imgKey:'RUG'},
+      {name:'BOT',    score:20, r:32, imgKey:'BOT'},
+      {name:'CANDLE', score:30, r:34, imgKey:'CANDLE'}
     ];
 
     let running=false, time=30, score=0, combo=1, lastSpawn=0, spawnEvery=650, animId=null;
@@ -177,34 +211,38 @@
     }
 
     function drawTarget(t){
-      const age = performance.now()-t.born;
+      const age = performance.now() - t.born;
       const lifeRatio = Math.max(0, 1 - age/t.life);
-      const pulse = 0.6 + Math.sin(age*0.01)*0.1;
       const radius = t.r * (0.9 + 0.2*lifeRatio);
 
-      // glow ring
-      ctx.shadowBlur=18; ctx.shadowColor=t.kind.glow;
-      ctx.beginPath(); ctx.arc(t.x,t.y,radius,0,Math.PI*2);
-      ctx.strokeStyle=t.kind.color; ctx.lineWidth=4; ctx.stroke();
-      ctx.shadowBlur=0;
+      // sprite sizing (keeps click radius independent of image size)
+      const img = IMAGES[t.kind.imgKey];
+      const base = img ? Math.max(img.width, img.height) : 64;
+      const scale = (radius * 2) / base;
+      const w = (img ? img.width : 64) * scale;
+      const h = (img ? img.height : 64) * scale;
 
-      // inner core
-      ctx.beginPath(); ctx.arc(t.x,t.y,radius*0.6,0,Math.PI*2);
-      const grd = ctx.createRadialGradient(t.x,t.y,0,t.x,t.y,radius*0.6);
-      grd.addColorStop(0,'rgba(255,255,255,0.9)');
-      grd.addColorStop(1, t.kind.color+"44");
-      ctx.fillStyle=grd; ctx.fill();
+      // soft glow under sprite
+      ctx.save();
+      ctx.globalAlpha = 0.25;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, radius*0.9, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(0,255,213,0.35)';
+      ctx.fill();
+      ctx.restore();
 
-      // symbol
-      ctx.fillStyle = 'rgba(255,255,255,.85)';
-      ctx.font = `${Math.floor(radius*0.7)}px monospace`;
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      const sym = t.kind.name==='RUG'?'R':(t.kind.name==='BOT'?'B':'✦');
-      ctx.fillText(sym, t.x, t.y+1);
+      // draw sprite (or a gray circle fallback)
+      if(img){
+        ctx.drawImage(img, t.x - w/2, t.y - h/2, w, h);
+      } else {
+        ctx.beginPath(); ctx.arc(t.x,t.y, radius, 0, Math.PI*2);
+        ctx.fillStyle = '#999'; ctx.fill();
+      }
 
-      // shrinking arc timer
-      ctx.beginPath(); ctx.arc(t.x,t.y,radius+6, -Math.PI/2, -Math.PI/2 + Math.PI*2*lifeRatio);
-      ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth=2; ctx.stroke();
+      // shrinking arc timer ring
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, radius + 6, -Math.PI/2, -Math.PI/2 + Math.PI*2*lifeRatio);
+      ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 2; ctx.stroke();
     }
 
     function loop(ts){
@@ -290,7 +328,20 @@
       updateTweet();
     }
 
-    startBtn.addEventListener('click', ()=>{ spawnEvery=650; score=0; combo=1; scoreEl.textContent=score; comboEl.textContent='x1'; overlay.querySelector('.title').textContent='CLICK TO SHRED'; overlay.querySelector('.hint').textContent='Glitch pests pop up. You’ve got 30 seconds. Click to shred and stack combo. Misses reset combo.'; start(); });
+    // Preload sprites on first Start
+    startBtn.addEventListener('click', async ()=>{
+      if(!IMAGES.RUG){
+        overlay.querySelector('.title').textContent = 'LOADING…';
+        overlay.querySelector('.hint').textContent = 'Fetching sprites.';
+        try { await preloadSprites(); }
+        catch(e){ overlay.querySelector('.hint').textContent = 'Sprite load failed, using fallback shapes.'; }
+      }
+      overlay.querySelector('.title').textContent='CLICK TO SHRED';
+      overlay.querySelector('.hint').textContent='Glitch pests pop up. You’ve got 30 seconds. Click to shred and stack combo. Misses reset combo.';
+      spawnEvery=650; score=0; combo=1;
+      scoreEl.textContent=score; comboEl.textContent='x1';
+      start();
+    });
 
     soundBtn.addEventListener('click', ()=>{
       audioOn = !audioOn; soundBtn.textContent = 'Sound: ' + (audioOn?'On':'Off');
