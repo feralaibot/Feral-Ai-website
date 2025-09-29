@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Click to Shred — FANG</title>
+  <style>
+    :root{
+      --bg:#0a0b0f; /* deep space */
+      --fg:#e8e8e8; /* neutral */
+      --neon1:#00ffd5; /* cyan */
+      --neon2:#8a2be2; /* glitch purple */
+      --neon3:#ff004d; /* blood red */
+      --neon4:#00ff6e; /* toxic green */
+      --accent:#19c2ff; /* solana-ish */
+    }
+    html,body{height:100%;margin:0;background:radial-gradient(1200px 800px at 70% 20%, #111 0%, #090c10 35%, #05060a 100%);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,"Helvetica Neue",Arial,sans-serif;color:var(--fg);}    
+    .wrap{position:fixed;inset:0;display:grid;grid-template-rows:auto 1fr auto}
+    header,footer{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;gap:8px}
+    header{color:#a7b3c2;letter-spacing:.08em;text-transform:uppercase;font-weight:700;font-size:12px}
+    header .brand{display:flex;gap:10px;align-items:center}
+    header .dot{width:8px;height:8px;border-radius:999px;background:linear-gradient(135deg,var(--neon2),var(--neon1));box-shadow:0 0 12px var(--neon2)}
+    #game{position:relative;display:grid;place-items:center}
+    canvas{$1
+      touch-action:none; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none;}
+    
+    .hud{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between}
+    .row{display:flex;gap:10px;align-items:center}
+    .hud .top{display:flex;justify-content:space-between;padding:12px}
+    .pill{pointer-events:auto;background:rgba(255,255,255,.06);backdrop-filter:blur(8px);padding:8px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.1);font-weight:700;font-size:14px}
+    .accent{border-color:rgba(0,255,213,.35);box-shadow:0 0 18px rgba(0,255,213,.25) inset,0 0 8px rgba(0,255,213,.2)}
+    .centerOverlay{position:absolute;inset:0;display:grid;place-items:center}
+    .panel{pointer-events:auto;background:rgba(8,10,18,.85);border:1px solid rgba(255,255,255,.12);box-shadow:0 0 45px rgba(138,43,226,.35);border-radius:16px;padding:22px 20px;max-width:520px;margin:0 12px}
+    .title{font-size:28px;font-weight:900;letter-spacing:.02em;background:linear-gradient(90deg,var(--neon1),var(--neon2));-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 0 16px rgba(0,255,213,.35)}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:12px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:linear-gradient(180deg, rgba(0,255,213,.2), rgba(138,43,226,.15));color:#fff;font-weight:800;text-transform:uppercase;letter-spacing:.08em;text-decoration:none;transition:transform .08s ease, box-shadow .2s ease}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 6px 22px rgba(0,255,213,.25)}
+    .btn.secondary{background:linear-gradient(180deg, rgba(255,0,77,.18), rgba(0,0,0,.1));border-color:rgba(255,0,77,.35)}
+    .hint{opacity:.75;font-size:12px}
+    .legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+    .tag{font-size:12px;border:1px solid rgba(255,255,255,.15);border-radius:999px;padding:4px 8px;opacity:.85}
+    footer{color:#90a3b5;gap:10px;flex-wrap:wrap}
+    a{color:#9ee7ff}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand"><span class="dot"></span> FANG ARCADE</div>
+      <div>Click to Shred — <span style="color:var(--accent)">$FANG</span></div>
+    </header>
+
+    <main id="game">
+      <canvas id="c" width="900" height="540" aria-label="Click the targets to score"></canvas>
+      <div class="hud" aria-hidden="true">
+        <div class="top">
+          <div class="row">
+            <div class="pill">Score: <span id="score">0</span></div>
+            <div class="pill">Time: <span id="time">30.0</span>s</div>
+            <div class="pill">Combo: <span id="combo">x1</span></div>
+          </div>
+          <div class="row">
+            <div class="pill accent">Highscore: <span id="hi">0</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="centerOverlay" id="overlay">
+        <div class="panel">
+          <div class="title">CLICK TO SHRED</div>
+          <p class="hint">Glitch pests pop up. You’ve got <strong>30 seconds</strong>. Click to shred and stack combo. Misses reset combo. Good luck, feral.</p>
+          <div class="legend">
+            <span class="tag">RUG = +10</span>
+            <span class="tag">BOT = +20</span>
+            <span class="tag">CANDLE = +30</span>
+            <span class="tag">MISS = combo reset</span>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:14px">
+            <button class="btn" id="start">Start</button>
+            <button class="btn secondary" id="soundToggle">Sound: Off</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <span>Tip: Mobile friendly. Best with sound on.</span>
+      <span style="margin-left:auto">
+        <a id="tweet" href="#" target="_blank" rel="noopener">Share score on X</a>
+      </span>
+    </footer>
+  </div>
+
+  <script>
+    // --- simple audio beeps (no external files) ---
+    let audioOn = false;
+    let actx = null;
+    function beep(freq=880, dur=0.06, vol=0.08){
+      if(!audioOn) return;
+      if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+      const o = actx.createOscillator();
+      const g = actx.createGain();
+      o.type = 'square';
+      o.frequency.value = freq;
+      g.gain.value = vol;
+      o.connect(g); g.connect(actx.destination);
+      const now = actx.currentTime;
+      o.start(now); o.stop(now+dur);
+    }
+
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    const overlay = document.getElementById('overlay');
+    const startBtn = document.getElementById('start');
+    const soundBtn = document.getElementById('soundToggle');
+    const scoreEl = document.getElementById('score');
+    const timeEl = document.getElementById('time');
+    const comboEl = document.getElementById('combo');
+    const hiEl = document.getElementById('hi');
+    const tweet = document.getElementById('tweet');
+
+    const W = canvas.width, H = canvas.height;
+
+    // Highscore from localStorage
+    let hi = parseInt(localStorage.getItem('fang_shred_hi')||'0',10); hiEl.textContent = hi;
+
+    const targets = [];
+    const kinds = [
+      {name:'RUG',   color:'#ff004d', glow:'#ff004d', score:10, r:26},
+      {name:'BOT',   color:'#00ffd5', glow:'#00ffd5', score:20, r:28},
+      {name:'CANDLE',color:'#8a2be2', glow:'#8a2be2', score:30, r:30}
+    ];
+
+    let running=false, time=30, score=0, combo=1, lastSpawn=0, spawnEvery=650, animId=null;
+
+    function reset(){
+      running=false; cancelAnimationFrame(animId);
+      time=30; score=0; combo=1; lastSpawn=0; targets.length=0;
+      scoreEl.textContent = score; comboEl.textContent = 'x'+combo; timeEl.textContent = time.toFixed(1);
+      overlay.style.display='grid';
+      updateTweet();
+      drawBG();
+    }
+
+    function start(){
+      running=true; overlay.style.display='none'; lastSpawn=performance.now();
+      loop(performance.now());
+    }
+
+    function updateTweet(){
+      const text = encodeURIComponent(`I scored ${score} in CLICK TO SHRED on the $FANG arcade. Can you beat me? #FANG #Solana #FeralAI`);
+      const url = encodeURIComponent(window.location.href.split('#')[0]);
+      tweet.href = `https://twitter.com/intent/tweet?text=${text}&url=${url}`;
+    }
+
+    function drawBG(){
+      ctx.clearRect(0,0,W,H);
+      // subtle grid
+      ctx.save();
+      ctx.globalAlpha = 0.08;
+      const s=30; ctx.strokeStyle='#8a2be2';
+      for(let x=0;x<=W;x+=s){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+      for(let y=0;y<=H;y+=s){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+      ctx.restore();
+      // vignette
+      const g = ctx.createRadialGradient(W*0.5,H*0.5,10,W*0.5,H*0.5,Math.max(W,H)*0.6);
+      g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.6)');
+      ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+    }
+
+    function spawn(){
+      const k = kinds[Math.floor(Math.random()*kinds.length)];
+      const r = k.r;
+      const x = Math.random()*(W-2*r)+r;
+      const y = Math.random()*(H-2*r)+r;
+      const life = 900 + Math.random()*600; // ms
+      targets.push({x,y,r,kind:k, born:performance.now(), life});
+    }
+
+    function drawTarget(t){
+      const age = performance.now()-t.born;
+      const lifeRatio = Math.max(0, 1 - age/t.life);
+      const pulse = 0.6 + Math.sin(age*0.01)*0.1;
+      const radius = t.r * (0.9 + 0.2*lifeRatio);
+
+      // glow ring
+      ctx.shadowBlur=18; ctx.shadowColor=t.kind.glow;
+      ctx.beginPath(); ctx.arc(t.x,t.y,radius,0,Math.PI*2);
+      ctx.strokeStyle=t.kind.color; ctx.lineWidth=4; ctx.stroke();
+      ctx.shadowBlur=0;
+
+      // inner core
+      ctx.beginPath(); ctx.arc(t.x,t.y,radius*0.6,0,Math.PI*2);
+      const grd = ctx.createRadialGradient(t.x,t.y,0,t.x,t.y,radius*0.6);
+      grd.addColorStop(0,'rgba(255,255,255,0.9)');
+      grd.addColorStop(1, t.kind.color+"44");
+      ctx.fillStyle=grd; ctx.fill();
+
+      // symbol
+      ctx.fillStyle = 'rgba(255,255,255,.85)';
+      ctx.font = `${Math.floor(radius*0.7)}px monospace`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      const sym = t.kind.name==='RUG'?'R':(t.kind.name==='BOT'?'B':'✦');
+      ctx.fillText(sym, t.x, t.y+1);
+
+      // shrinking arc timer
+      ctx.beginPath(); ctx.arc(t.x,t.y,radius+6, -Math.PI/2, -Math.PI/2 + Math.PI*2*lifeRatio);
+      ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth=2; ctx.stroke();
+    }
+
+    function loop(ts){
+      if(!running) return;
+      const dt = 16; // fixed-ish for spawn timing
+      time -= dt/1000; if(time < 0){ time=0; end(); return; }
+      timeEl.textContent = time.toFixed(1);
+
+      // dynamic spawn rate
+      if(ts - lastSpawn > spawnEvery){
+        spawn();
+        lastSpawn = ts;
+        // ramp difficulty
+        if(spawnEvery>240) spawnEvery -= 6;
+      }
+
+      drawBG();
+      // draw & cull
+      for(let i=targets.length-1;i>=0;i--){
+        const t = targets[i];
+        drawTarget(t);
+        if(performance.now() - t.born > t.life){
+          targets.splice(i,1);
+          combo = 1; comboEl.textContent='x'+combo; // missed
+        }
+      }
+      animId = requestAnimationFrame(loop);
+    }
+
+    canvas.addEventListener('click', (e)=>{
+      if(!running) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (canvas.width/rect.width);
+      const y = (e.clientY - rect.top) * (canvas.height/rect.height);
+      let hit = -1;
+      for(let i=targets.length-1;i>=0;i--){
+        const t = targets[i];
+        const dx=x-t.x, dy=y-t.y; if(dx*dx+dy*dy <= (t.r*1.1)*(t.r*1.1)){ hit=i; break; }
+      }
+      if(hit>=0){
+        const t = targets[hit];
+        targets.splice(hit,1);
+        score += Math.round(t.kind.score * combo);
+        scoreEl.textContent = score;
+        combo = Math.min(8, combo+0.25); comboEl.textContent='x'+combo.toFixed(2).replace(/\.00$/,'');
+        beep(880+Math.random()*200, 0.05, 0.06);
+      } else {
+        combo = 1; comboEl.textContent='x'+combo; beep(220,0.08,0.04);
+      }
+    });
+
+    // Touch support for mobile
+    canvas.addEventListener('touchstart', (e)=>{
+      if(!running) return;
+      const t0 = e.changedTouches[0];
+      const rect = canvas.getBoundingClientRect();
+      const x = (t0.clientX - rect.left) * (canvas.width/rect.width);
+      const y = (t0.clientY - rect.top) * (canvas.height/rect.height);
+      let hit = -1;
+      for(let i=targets.length-1;i>=0;i--){
+        const t = targets[i];
+        const dx=x-t.x, dy=y-t.y; if(dx*dx+dy*dy <= (t.r*1.1)*(t.r*1.1)){ hit=i; break; }
+      }
+      if(hit>=0){
+        const t = targets[hit];
+        targets.splice(hit,1);
+        score += Math.round(t.kind.score * combo);
+        scoreEl.textContent = score;
+        combo = Math.min(8, combo+0.25); comboEl.textContent='x'+combo.toFixed(2).replace(/\.00$/,'');
+        beep(880+Math.random()*200, 0.05, 0.06);
+      } else {
+        combo = 1; comboEl.textContent='x'+combo; beep(220,0.08,0.04);
+      }
+      e.preventDefault();
+    }, {passive:false});
+
+    function end(){
+      running=false; cancelAnimationFrame(animId);
+      if(score>hi){ hi=score; localStorage.setItem('fang_shred_hi', String(hi)); hiEl.textContent=hi; }
+      overlay.style.display='grid';
+      overlay.querySelector('.title').textContent = 'RUN OVER';
+      overlay.querySelector('.hint').innerHTML = `Score: <strong>${score}</strong> | Highscore: <strong>${hi}</strong><br/>Tap Start to shred again.`;
+      updateTweet();
+    }
+
+    startBtn.addEventListener('click', ()=>{ spawnEvery=650; score=0; combo=1; scoreEl.textContent=score; comboEl.textContent='x1'; overlay.querySelector('.title').textContent='CLICK TO SHRED'; overlay.querySelector('.hint').textContent='Glitch pests pop up. You’ve got 30 seconds. Click to shred and stack combo. Misses reset combo.'; start(); });
+
+    soundBtn.addEventListener('click', ()=>{
+      audioOn = !audioOn; soundBtn.textContent = 'Sound: ' + (audioOn?'On':'Off');
+      if(audioOn && !actx){ try{ actx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+    });
+
+    // initial draw
+    drawBG();
+    updateTweet();
+  </script>
+</body>
+</html>
