@@ -106,9 +106,9 @@
   </div>
 
   <script>
-    // ====== CONFIG: your Apps Script Web App URL ======
-    const SHEET_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwa6LWn3YraL9nxzk6euwtalB4G2eEjhuZkw2qElB1d-CaK_mWo43aVDKwqHyq-v44Qlg/exec';
-    // ==================================================
+    // ====== CONFIG: Apps Script Web App URL ======
+    const SHEET_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwd4Sif9ybuJ_VC9BLvgMNJ4RuMGHSrFxrmr18OJvcNiaF7IiW9Wy7_yoVhfUoeX2yqRA/exec';
+    // ============================================
 
     // --- audio ---
     let audioOn=false, actx=null;
@@ -162,7 +162,9 @@
             lbList.innerHTML = arr.map(e=>`<li>${e.score}</li>`).join('');
             lbHint.style.display='none';
           }else{
-            lbHint.style.display='block'; renderLocalLB();
+            lbHint.textContent = 'No global scores yet — be the first to set one!';
+            lbHint.style.display='block';
+            renderLocalLB();
           }
         } finally {
           delete window[cb];
@@ -307,7 +309,8 @@
       if(score>hi){ hi=score; localStorage.setItem('fang_shred_hi', String(hi)); hiEl.textContent=hi; }
       addToLocalLB(score);     // local fallback
       submitScoreRemote(score);
-      loadGlobalLeaderboard();
+      // small delay lets the sheet append before we fetch top-10
+      setTimeout(loadGlobalLeaderboard, 1200);
 
       overlay.style.display='grid';
       overlay.querySelector('.title').textContent='RUN OVER';
