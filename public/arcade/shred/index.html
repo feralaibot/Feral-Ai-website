@@ -1,30 +1,347 @@
-// Google Apps Script — handles POSTed JSON and logs to a Sheet
-function doPost(e){
-  var ss = SpreadsheetApp.openById('PUT_YOUR_SHEET_ID_HERE'); // <-- set this
-  var sheet = ss.getSheetByName('Scores') || ss.insertSheet('Scores');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Click to Shred — FANG</title>
+  <style>
+    :root{
+      --bg:#0a0b0f;
+      --fg:#e8e8e8;
+      --neon1:#00ffd5;
+      --neon2:#8a2be2;
+      --neon3:#ff004d;
+      --neon4:#00ff6e;
+      --accent:#19c2ff;
+    }
+    html,body{
+      height:100%; margin:0; color:var(--fg);
+      background:#000 url('assets/Bg4.jpeg') center/cover no-repeat fixed;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,"Helvetica Neue",Arial,sans-serif;
+    }
+    .wrap{position:fixed;inset:0;display:grid;grid-template-rows:auto 1fr auto}
+    header,footer{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;gap:8px}
+    header{color:#a7b3c2;letter-spacing:.08em;text-transform:uppercase;font-weight:700;font-size:12px}
+    header .brand{display:flex;gap:10px;align-items:center}
+    header .dot{width:8px;height:8px;border-radius:999px;background:linear-gradient(135deg,var(--neon2),var(--neon1));box-shadow:0 0 12px var(--neon2)}
+    #game{position:relative;display:grid;place-items:center}
+    canvas{
+      width:min(100vw,900px);
+      height:calc(min(100vw,900px) * 0.6);
+      max-height:78vh;
+      border:1px solid rgba(255,255,255,.06);
+      background-image:url('assets/Bg4.jpeg');
+      background-size:cover;background-position:center;background-repeat:no-repeat;
+      box-shadow:0 0 30px rgba(0,255,213,.08), inset 0 0 40px rgba(138,43,226,.08);
+      border-radius:18px;
+      touch-action:none; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none;
+    }
+    .hud{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between}
+    .row{display:flex;gap:10px;align-items:center}
+    .hud .top{display:flex;justify-content:space-between;padding:12px}
+    .pill{pointer-events:auto;background:rgba(255,255,255,.06);backdrop-filter:blur(8px);padding:8px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.1);font-weight:700;font-size:14px}
+    .accent{border-color:rgba(0,255,213,.35);box-shadow:0 0 18px rgba(0,255,213,.25) inset,0 0 8px rgba(0,255,213,.2)}
+    .centerOverlay{position:absolute;inset:0;display:grid;place-items:center}
+    .panel{pointer-events:auto;background:rgba(8,10,18,.85);border:1px solid rgba(255,255,255,.12);box-shadow:0 0 45px rgba(138,43,226,.35);border-radius:16px;padding:22px 20px;max-width:520px;margin:0 12px}
+    .title{font-size:28px;font-weight:900;letter-spacing:.02em;background:linear-gradient(90deg,var(--neon1),var(--neon2));-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 0 16px rgba(0,255,213,.35)}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:12px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:linear-gradient(180deg, rgba(0,255,213,.2), rgba(138,43,226,.15));color:#fff;font-weight:800;text-transform:uppercase;letter-spacing:.08em;text-decoration:none;transition:transform .08s ease, box-shadow .2s ease}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 6px 22px rgba(0,255,213,.25)}
+    .btn.secondary{background:linear-gradient(180deg, rgba(255,0,77,.18), rgba(0,0,0,.1));border-color:rgba(255,0,77,.35)}
+    .hint{opacity:.75;font-size:12px}
+    .legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+    .tag{font-size:12px;border:1px solid rgba(255,255,255,.15);border-radius:999px;padding:4px 8px;opacity:.85}
+    footer{color:#90a3b5;gap:10px;flex-wrap:wrap}
+    a{color:#9ee7ff}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand"><span class="dot"></span> FANG ARCADE</div>
+      <div>Click to Shred — <span style="color:var(--accent)">$FANG</span></div>
+    </header>
 
-  // Ensure header row
-  if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['Timestamp (server)', 'Name/Handle', 'Score', 'Client TS', 'UserAgent']);
-  }
+    <main id="game">
+      <canvas id="c" width="900" height="540" aria-label="Click the targets to score"></canvas>
+      <div class="hud" aria-hidden="true">
+        <div class="top">
+          <div class="row">
+            <div class="pill">Score: <span id="score">0</span></div>
+            <div class="pill">Time: <span id="time">30.0</span>s</div>
+            <div class="pill">Combo: <span id="combo">x1</span></div>
+          </div>
+          <div class="row">
+            <div class="pill accent">Highscore: <span id="hi">0</span></div>
+          </div>
+        </div>
+      </div>
 
-  var body = e && e.postData ? e.postData.contents : '{}';
-  var data;
-  try {
-    data = JSON.parse(body);
-  } catch (err) {
-    data = {};
-  }
+      <div class="centerOverlay" id="overlay">
+        <div class="panel">
+          <div class="title">CLICK TO SHRED</div>
+          <p class="hint">Glitch pests pop up. You’ve got <strong>30 seconds</strong>. Click to shred and stack combo. Misses reset combo. Good luck, feral.</p>
+          <div class="legend">
+            <span class="tag">RUG = +10</span>
+            <span class="tag">BOT = +20</span>
+            <span class="tag">CANDLE = +30</span>
+            <span class="tag">MISS = combo reset</span>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:14px">
+            <button class="btn" id="start">Start</button>
+            <button class="btn secondary" id="soundToggle">Sound: Off</button>
+          </div>
 
-  sheet.appendRow([
-    new Date(),                     // server timestamp
-    data.name || '',                // name/handle
-    Number(data.score) || 0,        // score
-    data.ts || '',                  // client-side ISO timestamp
-    data.ua || ''                   // user agent snippet
-  ]);
+          <!-- Leaderboard (Top 10, local) -->
+          <div id="leaderboard" style="margin-top:14px">
+            <div class="tag" style="font-weight:800">Leaderboard (Top 10)</div>
+            <ol id="lbList" style="margin:6px 0 0 20px; padding:0"></ol>
+          </div>
+        </div>
+      </div>
+    </main>
 
-  return ContentService
-    .createTextOutput('ok')
-    .setMimeType(ContentService.MimeType.TEXT);
-}
+    <footer>
+      <span>Tip: Mobile friendly. Best with sound on.</span>
+      <span style="margin-left:auto">
+        <a id="tweet" href="#" target="_blank" rel="noopener">Share score on X</a>
+      </span>
+    </footer>
+  </div>
+
+  <script>
+    // --- simple audio beeps ---
+    let audioOn=false, actx=null;
+    function beep(freq=880,dur=0.06,vol=0.08){
+      if(!audioOn) return;
+      if(!actx) actx=new (window.AudioContext||window.webkitAudioContext)();
+      const o=actx.createOscillator(), g=actx.createGain();
+      o.type='square'; o.frequency.value=freq; g.gain.value=vol;
+      o.connect(g); g.connect(actx.destination);
+      const now=actx.currentTime; o.start(now); o.stop(now+dur);
+    }
+
+    const canvas=document.getElementById('c');
+    const ctx=canvas.getContext('2d');
+    const overlay=document.getElementById('overlay');
+    const startBtn=document.getElementById('start');
+    const soundBtn=document.getElementById('soundToggle');
+    const scoreEl=document.getElementById('score');
+    const timeEl=document.getElementById('time');
+    const comboEl=document.getElementById('combo');
+    const hiEl=document.getElementById('hi');
+    const tweet=document.getElementById('tweet');
+    const lbList=document.getElementById('lbList');
+
+    const W=canvas.width, H=canvas.height;
+
+    // Highscore local
+    let hi=parseInt(localStorage.getItem('fang_shred_hi')||'0',10); hiEl.textContent=hi;
+
+    // Local leaderboard (scores only)
+    const LB_KEY='fang_shred_lb';
+    function getLB(){ try{return JSON.parse(localStorage.getItem(LB_KEY)||'[]');}catch(_){return [];} }
+    function setLB(arr){ localStorage.setItem(LB_KEY, JSON.stringify(arr)); }
+    function renderLB(list=getLB()){
+      lbList.innerHTML = list.length ? list.map((e)=>`<li>${e.s}</li>`).join('') : '<li>No scores yet.</li>';
+    }
+    function addToLB(sc){
+      const lb=getLB(); lb.push({s:sc, t:Date.now()});
+      lb.sort((a,b)=>b.s-a.s);
+      setLB(lb.slice(0,10)); renderLB();
+    }
+    renderLB();
+
+    const targets=[];
+
+    // Sprites
+    const ASSET_PATH='assets/';
+    const SPRITES={ RUG:ASSET_PATH+'fang_rug.png', BOT:ASSET_PATH+'fang_bot.png', CANDLE:ASSET_PATH+'fang_candle.png' };
+    const IMAGES={};
+    function loadImage(src){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=src; }); }
+    async function preloadSprites(){ for(const [k,src] of Object.entries(SPRITES)){ IMAGES[k]=await loadImage(src); } }
+
+    const kinds=[
+      {name:'RUG',score:10,r:30,imgKey:'RUG'},
+      {name:'BOT',score:20,r:32,imgKey:'BOT'},
+      {name:'CANDLE',score:30,r:34,imgKey:'CANDLE'}
+    ];
+
+    let running=false, time=30, score=0, combo=1, lastSpawn=0, spawnEvery=650, animId=null;
+
+    function reset(){
+      running=false; cancelAnimationFrame(animId);
+      time=30; score=0; combo=1; lastSpawn=0; targets.length=0;
+      scoreEl.textContent=score; comboEl.textContent='x'+combo; timeEl.textContent=time.toFixed(1);
+      overlay.style.display='grid';
+      updateTweet();
+      drawBG();
+      startBtn.textContent='Start';
+    }
+
+    // Clean fresh run every time
+    function start(){
+      running=true;
+      time=30; score=0; combo=1; spawnEvery=650; targets.length=0;
+      scoreEl.textContent=score; comboEl.textContent='x1'; timeEl.textContent=time.toFixed(1);
+      overlay.style.display='none';
+      lastSpawn=performance.now();
+      loop(performance.now());
+    }
+
+    function updateTweet(){
+      const text=encodeURIComponent(`I scored ${score} in CLICK TO SHRED on the $FANG arcade. Can you beat me? #FANG #Solana #FeralAI`);
+      const url=encodeURIComponent(window.location.href.split('#')[0]);
+      tweet.href=`https://twitter.com/intent/tweet?text=${text}&url=${url}`;
+    }
+
+    function drawBG(){
+      ctx.clearRect(0,0,W,H);
+      ctx.save(); ctx.globalAlpha=0.08; const s=30; ctx.strokeStyle='#8a2be2';
+      for(let x=0;x<=W;x+=s){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+      for(let y=0;y<=H;y+=s){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+      ctx.restore();
+      const g=ctx.createRadialGradient(W*.5,H*.5,10,W*.5,H*.5,Math.max(W,H)*.6);
+      g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.6)');
+      ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    }
+
+    function spawn(){
+      const k=kinds[Math.floor(Math.random()*kinds.length)];
+      const r=k.r;
+      const x=Math.random()*(W-2*r)+r;
+      const y=Math.random()*(H-2*r)+r;
+      const life=900+Math.random()*600;
+      targets.push({x,y,r,kind:k,born:performance.now(),life});
+    }
+
+    function drawTarget(t){
+      const age=performance.now()-t.born;
+      const lifeRatio=Math.max(0,1-age/t.life);
+      const radius=t.r*(0.9+0.2*lifeRatio);
+
+      const img=IMAGES[t.kind.imgKey];
+      const base=img?Math.max(img.width,img.height):64;
+      const scale=(radius*2)/base;
+      const w=(img?img.width:64)*scale;
+      const h=(img?img.height:64)*scale;
+
+      // glow
+      ctx.save(); ctx.globalAlpha=0.25; ctx.beginPath(); ctx.arc(t.x,t.y,radius*0.9,0,Math.PI*2);
+      ctx.fillStyle='rgba(0,255,213,0.35)'; ctx.fill(); ctx.restore();
+
+      if(img){ ctx.drawImage(img, t.x-w/2, t.y-h/2, w, h); }
+      else { ctx.beginPath(); ctx.arc(t.x,t.y,radius,0,Math.PI*2); ctx.fillStyle='#999'; ctx.fill(); }
+
+      // timer ring
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, radius+6, -Math.PI/2, -Math.PI/2 + Math.PI*2*lifeRatio);
+      ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.lineWidth=2; ctx.stroke();
+    }
+
+    function loop(ts){
+      if(!running) return;
+      const dt=16;
+      time-=dt/1000; if(time<0){ time=0; end(); return; }
+      timeEl.textContent=time.toFixed(1);
+
+      if(ts-lastSpawn>spawnEvery){
+        spawn(); lastSpawn=ts;
+        if(spawnEvery>240) spawnEvery-=6;
+      }
+
+      drawBG();
+      for(let i=targets.length-1;i>=0;i--){
+        const t=targets[i];
+        drawTarget(t);
+        if(performance.now()-t.born>t.life){
+          targets.splice(i,1);
+          combo=1; comboEl.textContent='x'+combo; // missed
+        }
+      }
+      animId=requestAnimationFrame(loop);
+    }
+
+    function handleClickAt(x,y){
+      if(!running) return;
+      let hit=-1;
+      for(let i=targets.length-1;i>=0;i--){
+        const t=targets[i];
+        const dx=x-t.x, dy=y-t.y;
+        if(dx*dx+dy*dy <= (t.r*1.1)*(t.r*1.1)){ hit=i; break; }
+      }
+      if(hit>=0){
+        const t=targets[hit]; targets.splice(hit,1);
+        score += Math.round(t.kind.score*combo);
+        scoreEl.textContent=score;
+        combo=Math.min(8, combo+0.25);
+        comboEl.textContent='x'+combo.toFixed(2).replace(/\.00$/,'');
+        beep(880+Math.random()*200,0.05,0.06);
+      } else {
+        combo=1; comboEl.textContent='x'+combo; beep(220,0.08,0.04);
+      }
+    }
+
+    canvas.addEventListener('click', (e)=>{
+      const rect=canvas.getBoundingClientRect();
+      const x=(e.clientX-rect.left)*(canvas.width/rect.width);
+      const y=(e.clientY-rect.top)*(canvas.height/rect.height);
+      handleClickAt(x,y);
+    });
+
+    canvas.addEventListener('touchstart', (e)=>{
+      const t0=e.changedTouches[0], rect=canvas.getBoundingClientRect();
+      const x=(t0.clientX-rect.left)*(canvas.width/rect.width);
+      const y=(t0.clientY-rect.top)*(canvas.height/rect.height);
+      handleClickAt(x,y); e.preventDefault();
+    }, {passive:false});
+
+    function end(){
+      running=false; cancelAnimationFrame(animId);
+      if(score>hi){ hi=score; localStorage.setItem('fang_shred_hi', String(hi)); hiEl.textContent=hi; }
+      addToLB(score);
+      overlay.style.display='grid';
+      overlay.querySelector('.title').textContent='RUN OVER';
+      overlay.querySelector('.hint').innerHTML = `Score: <strong>${score}</strong> | Highscore: <strong>${hi}</strong><br/>Tap Start Again to shred another run.`;
+      updateTweet();
+      startBtn.textContent='Start Again';
+    }
+
+    startBtn.addEventListener('click', async ()=>{
+      if(!IMAGES.RUG){
+        overlay.querySelector('.title').textContent='LOADING…';
+        overlay.querySelector('.hint').textContent='Fetching sprites.';
+        try{ await preloadSprites(); }
+        catch{ overlay.querySelector('.hint').textContent='Sprite load failed, using fallback shapes.'; }
+      }
+      overlay.querySelector('.title').textContent='CLICK TO SHRED';
+      overlay.querySelector('.hint').textContent='Glitch pests pop up. You’ve got 30 seconds. Click to shred and stack combo. Misses reset combo.';
+      start();
+    });
+
+    soundBtn.addEventListener('click', ()=>{
+      audioOn=!audioOn; soundBtn.textContent='Sound: '+(audioOn?'On':'Off');
+      if(audioOn && !actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+    });
+
+    // first frame
+    (function init(){
+      const W=canvas.width,H=canvas.height;
+      ctx.clearRect(0,0,W,H);
+      ctx.save(); ctx.globalAlpha=0.08; const s=30; ctx.strokeStyle='#8a2be2';
+      for(let x=0;x<=W;x+=s){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+      for(let y=0;y<=H;y+=s){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+      ctx.restore();
+      const g=ctx.createRadialGradient(W*.5,H*.5,10,W*.5,H*.5,Math.max(W,H)*.6);
+      g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.6)');
+      ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+
+      const text=encodeURIComponent(`I scored 0 in CLICK TO SHRED on the $FANG arcade. Can you beat me? #FANG #Solana #FeralAI`);
+      const url=encodeURIComponent(window.location.href.split('#')[0]);
+      tweet.href=`https://twitter.com/intent/tweet?text=${text}&url=${url}`;
+    })();
+
+    window.addEventListener('load', reset);
+  </script>
+</body>
+</html>
+
