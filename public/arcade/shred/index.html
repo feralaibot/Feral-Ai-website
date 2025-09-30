@@ -14,9 +14,9 @@
       --neon4:#00ff6e;
       --accent:#19c2ff;
     }
-    /* Page background uses the same image so edges outside canvas match */
+    /* Page background also uses bg4.jpeg so the edges outside the canvas match */
     html,body{
-      height:100%;margin:0;color:var(--fg);
+      height:100%; margin:0; color:var(--fg);
       background: #000 url('assets/bg4.jpeg') center / cover no-repeat fixed;
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,"Helvetica Neue",Arial,sans-serif;
     }
@@ -27,13 +27,20 @@
     header .dot{width:8px;height:8px;border-radius:999px;background:linear-gradient(135deg,var(--neon2),var(--neon1));box-shadow:0 0 12px var(--neon2)}
     #game{position:relative;display:grid;place-items:center}
 
-    /* Canvas styling (no internal CSS bg, we draw bg image inside the canvas) */
+    /* Canvas uses bg4.jpeg directly via CSS (no JS needed) */
     canvas{
       width:min(100vw,900px);
       height:calc(min(100vw,900px) * 0.6);
       max-height:78vh;
       border:1px solid rgba(255,255,255,.06);
-      background:rgba(0,0,0,.15);
+
+      /* 👇 your NFT scene background */
+      background-image: url('assets/bg4.jpeg');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+
+      /* styling */
       box-shadow:0 0 30px rgba(0,255,213,.08), inset 0 0 40px rgba(138,43,226,.08);
       border-radius:18px;
       touch-action:none; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none;
@@ -140,7 +147,7 @@
 
     const targets = [];
 
-    // ---- SPRITE LOADER ----
+    // ---- SPRITES ----
     const ASSET_PATH = 'assets/'; // images live in public/arcade/shred/assets/
     const SPRITES = {
       RUG:    ASSET_PATH + 'fang_rug.png',
@@ -160,20 +167,14 @@
       for (const [key, src] of Object.entries(SPRITES)){
         IMAGES[key] = await loadImage(src);
       }
-      // also load the background image
-      BG_IMG = await loadImage(BG_SRC);
     }
 
-    // Define kinds using sprites (r = click radius)
+    // kinds (r = click radius)
     const kinds = [
       {name:'RUG',    score:10, r:30, imgKey:'RUG'},
       {name:'BOT',    score:20, r:32, imgKey:'BOT'},
       {name:'CANDLE', score:30, r:34, imgKey:'CANDLE'}
     ];
-
-    // ---- BACKGROUND IMAGE ----
-    const BG_SRC = 'assets/bg4.jpeg';
-    let BG_IMG = null;
 
     let running=false, time=30, score=0, combo=1, lastSpawn=0, spawnEvery=650, animId=null;
 
@@ -197,26 +198,9 @@
       tweet.href = `https://twitter.com/intent/tweet?text=${text}&url=${url}`;
     }
 
-    // Draw background image INSIDE the canvas (cover behavior) + overlays
+    // draw only overlays (grid + vignette); CSS handles the photo background
     function drawBG(){
       ctx.clearRect(0,0,W,H);
-
-      if (BG_IMG){
-        const iw = BG_IMG.width, ih = BG_IMG.height;
-        const cw = W, ch = H;
-        const ir = iw/ih, cr = cw/ch;
-        let dw, dh, dx, dy;
-        if (ir > cr){ // image wider than canvas: fit height, crop sides
-          dh = ch; dw = dh * ir; dx = (cw - dw)/2; dy = 0;
-        } else {     // image taller than canvas: fit width, crop top/bottom
-          dw = cw; dh = dw / ir; dx = 0; dy = (ch - dh)/2;
-        }
-        ctx.drawImage(BG_IMG, dx, dy, dw, dh);
-      } else {
-        // fallback solid bg
-        ctx.fillStyle = '#0a0b0f';
-        ctx.fillRect(0,0,W,H);
-      }
 
       // subtle grid
       ctx.save();
@@ -247,7 +231,7 @@
       const lifeRatio = Math.max(0, 1 - age/t.life);
       const radius = t.r * (0.9 + 0.2*lifeRatio);
 
-      // sprite sizing (keeps click radius independent of image size)
+      // sprite sizing
       const img = IMAGES[t.kind.imgKey];
       const base = img ? Math.max(img.width, img.height) : 64;
       const scale = (radius * 2) / base;
@@ -263,7 +247,7 @@
       ctx.fill();
       ctx.restore();
 
-      // draw sprite (or a gray circle fallback)
+      // sprite / fallback
       if(img){
         ctx.drawImage(img, t.x - w/2, t.y - h/2, w, h);
       } else {
@@ -290,7 +274,6 @@
       }
 
       drawBG();
-      // draw & cull
       for(let i=targets.length-1;i>=0;i--){
         const t = targets[i];
         drawTarget(t);
@@ -324,7 +307,6 @@
       }
     });
 
-    // Touch support for mobile
     canvas.addEventListener('touchstart', (e)=>{
       if(!running) return;
       const t0 = e.changedTouches[0];
@@ -358,13 +340,13 @@
       updateTweet();
     }
 
-    // Preload sprites + background on first Start
+    // Preload sprites on first Start
     startBtn.addEventListener('click', async ()=>{
-      if(!IMAGES.RUG || !BG_IMG){
+      if(!IMAGES.RUG){
         overlay.querySelector('.title').textContent = 'LOADING…';
-        overlay.querySelector('.hint').textContent = 'Fetching assets.';
+        overlay.querySelector('.hint').textContent = 'Fetching sprites.';
         try { await preloadSprites(); }
-        catch(e){ overlay.querySelector('.hint').textContent = 'Asset load failed; using fallbacks.'; }
+        catch(e){ overlay.querySelector('.hint').textContent = 'Sprite load failed, using fallback shapes.'; }
       }
       overlay.querySelector('.title').textContent='CLICK TO SHRED';
       overlay.querySelector('.hint').textContent='Glitch pests pop up. You’ve got 30 seconds. Click to shred and stack combo. Misses reset combo.';
@@ -378,10 +360,8 @@
       if(audioOn && !actx){ try{ actx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
     });
 
-    // Load background immediately so it's visible before Start
-    loadImage(BG_SRC).then(img => { BG_IMG = img; drawBG(); }).catch(()=>{ drawBG(); });
-
-    // initial tweet link
+    // first frame
+    drawBG();
     updateTweet();
   </script>
 </body>
