@@ -6,13 +6,8 @@
   <title>Click to Shred — FANG</title>
   <style>
     :root{
-      --bg:#0a0b0f;
-      --fg:#e8e8e8;
-      --neon1:#00ffd5;
-      --neon2:#8a2be2;
-      --neon3:#ff004d;
-      --neon4:#00ff6e;
-      --accent:#19c2ff;
+      --bg:#0a0b0f; --fg:#e8e8e8;
+      --neon1:#00ffd5; --neon2:#8a2be2; --neon3:#ff004d; --neon4:#00ff6e; --accent:#19c2ff;
     }
     html,body{
       height:100%; margin:0; color:var(--fg);
@@ -30,8 +25,7 @@
       height:calc(min(100vw,900px) * 0.6);
       max-height:78vh;
       border:1px solid rgba(255,255,255,.06);
-      background-image:url('assets/Bg4.jpeg');
-      background-size:cover;background-position:center;background-repeat:no-repeat;
+      background-image:url('assets/Bg4.jpeg'); background-size:cover; background-position:center; background-repeat:no-repeat;
       box-shadow:0 0 30px rgba(0,255,213,.08), inset 0 0 40px rgba(138,43,226,.08);
       border-radius:18px;
       touch-action:none; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none;
@@ -63,6 +57,7 @@
 
     <main id="game">
       <canvas id="c" width="900" height="540" aria-label="Click the targets to score"></canvas>
+
       <div class="hud" aria-hidden="true">
         <div class="top">
           <div class="row">
@@ -86,15 +81,17 @@
             <span class="tag">CANDLE = +30</span>
             <span class="tag">MISS = combo reset</span>
           </div>
-          <div style="display:flex;gap:10px;margin-top:14px">
+
+          <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
             <button class="btn" id="start">Start</button>
             <button class="btn secondary" id="soundToggle">Sound: Off</button>
           </div>
 
-          <!-- Leaderboard (Top 10, local) -->
+          <!-- Global Leaderboard -->
           <div id="leaderboard" style="margin-top:14px">
-            <div class="tag" style="font-weight:800">Leaderboard (Top 10)</div>
+            <div class="tag" style="font-weight:800">Leaderboard (Global Top 10)</div>
             <ol id="lbList" style="margin:6px 0 0 20px; padding:0"></ol>
+            <div id="lbHint" class="hint" style="margin-top:6px;display:none">Showing local scores until the global board is connected.</div>
           </div>
         </div>
       </div>
@@ -109,7 +106,11 @@
   </div>
 
   <script>
-    // --- simple audio beeps ---
+    // ====== CONFIG: your Apps Script Web App URL ======
+    const SHEET_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwa6LWn3YraL9nxzk6euwtalB4G2eEjhuZkw2qElB1d-CaK_mWo43aVDKwqHyq-v44Qlg/exec';
+    // ==================================================
+
+    // --- audio ---
     let audioOn=false, actx=null;
     function beep(freq=880,dur=0.06,vol=0.08){
       if(!audioOn) return;
@@ -131,25 +132,47 @@
     const hiEl=document.getElementById('hi');
     const tweet=document.getElementById('tweet');
     const lbList=document.getElementById('lbList');
+    const lbHint=document.getElementById('lbHint');
 
     const W=canvas.width, H=canvas.height;
 
-    // Highscore local
+    // Highscore (local)
     let hi=parseInt(localStorage.getItem('fang_shred_hi')||'0',10); hiEl.textContent=hi;
 
-    // Local leaderboard (scores only)
+    // Local fallback leaderboard
     const LB_KEY='fang_shred_lb';
     function getLB(){ try{return JSON.parse(localStorage.getItem(LB_KEY)||'[]');}catch(_){return [];} }
     function setLB(arr){ localStorage.setItem(LB_KEY, JSON.stringify(arr)); }
-    function renderLB(list=getLB()){
-      lbList.innerHTML = list.length ? list.map((e)=>`<li>${e.s}</li>`).join('') : '<li>No scores yet.</li>';
+    function renderLocalLB(list=getLB()){
+      lbList.innerHTML = list.length ? list.map(e=>`<li>${e.s}</li>`).join('') : '<li>No scores yet.</li>';
     }
-    function addToLB(sc){
-      const lb=getLB(); lb.push({s:sc, t:Date.now()});
+    function addToLocalLB(sc){
+      const lb=getLB(); lb.push({s:sc,t:Date.now()});
       lb.sort((a,b)=>b.s-a.s);
-      setLB(lb.slice(0,10)); renderLB();
+      setLB(lb.slice(0,10)); renderLocalLB();
     }
-    renderLB();
+
+    // Global leaderboard (JSONP to avoid CORS)
+    function loadGlobalLeaderboard(){
+      const cb = 'updateGlobalLB_' + Date.now();
+      window[cb] = function(data){
+        try{
+          const arr = (data && data.top) || [];
+          if(arr.length){
+            lbList.innerHTML = arr.map(e=>`<li>${e.score}</li>`).join('');
+            lbHint.style.display='none';
+          }else{
+            lbHint.style.display='block'; renderLocalLB();
+          }
+        } finally {
+          delete window[cb];
+        }
+      };
+      const s=document.createElement('script');
+      s.src = SHEET_WEBAPP_URL + '?top=10&callback=' + cb + '&_=' + Date.now();
+      s.onerror = function(){ lbHint.style.display='block'; renderLocalLB(); };
+      document.body.appendChild(s);
+    }
 
     const targets=[];
 
@@ -176,9 +199,9 @@
       updateTweet();
       drawBG();
       startBtn.textContent='Start';
+      loadGlobalLeaderboard();
     }
 
-    // Clean fresh run every time
     function start(){
       running=true;
       time=30; score=0; combo=1; spawnEvery=650; targets.length=0;
@@ -207,56 +230,30 @@
 
     function spawn(){
       const k=kinds[Math.floor(Math.random()*kinds.length)];
-      const r=k.r;
-      const x=Math.random()*(W-2*r)+r;
-      const y=Math.random()*(H-2*r)+r;
+      const r=k.r, x=Math.random()*(W-2*r)+r, y=Math.random()*(H-2*r)+r;
       const life=900+Math.random()*600;
       targets.push({x,y,r,kind:k,born:performance.now(),life});
     }
 
     function drawTarget(t){
-      const age=performance.now()-t.born;
-      const lifeRatio=Math.max(0,1-age/t.life);
-      const radius=t.r*(0.9+0.2*lifeRatio);
-
-      const img=IMAGES[t.kind.imgKey];
-      const base=img?Math.max(img.width,img.height):64;
-      const scale=(radius*2)/base;
-      const w=(img?img.width:64)*scale;
-      const h=(img?img.height:64)*scale;
-
-      // glow
-      ctx.save(); ctx.globalAlpha=0.25; ctx.beginPath(); ctx.arc(t.x,t.y,radius*0.9,0,Math.PI*2);
-      ctx.fillStyle='rgba(0,255,213,0.35)'; ctx.fill(); ctx.restore();
-
-      if(img){ ctx.drawImage(img, t.x-w/2, t.y-h/2, w, h); }
-      else { ctx.beginPath(); ctx.arc(t.x,t.y,radius,0,Math.PI*2); ctx.fillStyle='#999'; ctx.fill(); }
-
-      // timer ring
-      ctx.beginPath();
-      ctx.arc(t.x, t.y, radius+6, -Math.PI/2, -Math.PI/2 + Math.PI*2*lifeRatio);
-      ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.lineWidth=2; ctx.stroke();
+      const age=performance.now()-t.born, lifeRatio=Math.max(0,1-age/t.life), radius=t.r*(0.9+0.2*lifeRatio);
+      const img=IMAGES[t.kind.imgKey], base=img?Math.max(img.width,img.height):64, scale=(radius*2)/base, w=(img?img.width:64)*scale, h=(img?img.height:64)*scale;
+      ctx.save(); ctx.globalAlpha=0.25; ctx.beginPath(); ctx.arc(t.x,t.y,radius*0.9,0,Math.PI*2); ctx.fillStyle='rgba(0,255,213,0.35)'; ctx.fill(); ctx.restore();
+      if(img){ ctx.drawImage(img,t.x-w/2,t.y-h/2,w,h); } else { ctx.beginPath(); ctx.arc(t.x,t.y,radius,0,Math.PI*2); ctx.fillStyle='#999'; ctx.fill(); }
+      ctx.beginPath(); ctx.arc(t.x,t.y,radius+6,-Math.PI/2,-Math.PI/2 + Math.PI*2*lifeRatio); ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.lineWidth=2; ctx.stroke();
     }
 
     function loop(ts){
       if(!running) return;
-      const dt=16;
-      time-=dt/1000; if(time<0){ time=0; end(); return; }
+      const dt=16; time-=dt/1000; if(time<0){ time=0; end(); return; }
       timeEl.textContent=time.toFixed(1);
 
-      if(ts-lastSpawn>spawnEvery){
-        spawn(); lastSpawn=ts;
-        if(spawnEvery>240) spawnEvery-=6;
-      }
+      if(ts-lastSpawn>spawnEvery){ spawn(); lastSpawn=ts; if(spawnEvery>240) spawnEvery-=6; }
 
       drawBG();
       for(let i=targets.length-1;i>=0;i--){
-        const t=targets[i];
-        drawTarget(t);
-        if(performance.now()-t.born>t.life){
-          targets.splice(i,1);
-          combo=1; comboEl.textContent='x'+combo; // missed
-        }
+        const t=targets[i]; drawTarget(t);
+        if(performance.now()-t.born>t.life){ targets.splice(i,1); combo=1; comboEl.textContent='x'+combo; }
       }
       animId=requestAnimationFrame(loop);
     }
@@ -265,16 +262,13 @@
       if(!running) return;
       let hit=-1;
       for(let i=targets.length-1;i>=0;i--){
-        const t=targets[i];
-        const dx=x-t.x, dy=y-t.y;
+        const t=targets[i]; const dx=x-t.x, dy=y-t.y;
         if(dx*dx+dy*dy <= (t.r*1.1)*(t.r*1.1)){ hit=i; break; }
       }
       if(hit>=0){
         const t=targets[hit]; targets.splice(hit,1);
-        score += Math.round(t.kind.score*combo);
-        scoreEl.textContent=score;
-        combo=Math.min(8, combo+0.25);
-        comboEl.textContent='x'+combo.toFixed(2).replace(/\.00$/,'');
+        score += Math.round(t.kind.score*combo); scoreEl.textContent=score;
+        combo=Math.min(8, combo+0.25); comboEl.textContent='x'+combo.toFixed(2).replace(/\.00$/,'');
         beep(880+Math.random()*200,0.05,0.06);
       } else {
         combo=1; comboEl.textContent='x'+combo; beep(220,0.08,0.04);
@@ -295,10 +289,26 @@
       handleClickAt(x,y); e.preventDefault();
     }, {passive:false});
 
+    // ---- Submit score to Sheet (fire-and-forget) ----
+    async function submitScoreRemote(score){
+      const payload = { score, ts: new Date().toISOString() };
+      try{
+        await fetch(SHEET_WEBAPP_URL, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload),
+          mode: 'no-cors'
+        });
+      }catch(e){ console.warn('Score submit failed:', e); }
+    }
+
     function end(){
       running=false; cancelAnimationFrame(animId);
       if(score>hi){ hi=score; localStorage.setItem('fang_shred_hi', String(hi)); hiEl.textContent=hi; }
-      addToLB(score);
+      addToLocalLB(score);     // local fallback
+      submitScoreRemote(score);
+      loadGlobalLeaderboard();
+
       overlay.style.display='grid';
       overlay.querySelector('.title').textContent='RUN OVER';
       overlay.querySelector('.hint').innerHTML = `Score: <strong>${score}</strong> | Highscore: <strong>${hi}</strong><br/>Tap Start Again to shred another run.`;
@@ -306,6 +316,7 @@
       startBtn.textContent='Start Again';
     }
 
+    // Start button
     startBtn.addEventListener('click', async ()=>{
       if(!IMAGES.RUG){
         overlay.querySelector('.title').textContent='LOADING…';
@@ -338,10 +349,12 @@
       const text=encodeURIComponent(`I scored 0 in CLICK TO SHRED on the $FANG arcade. Can you beat me? #FANG #Solana #FeralAI`);
       const url=encodeURIComponent(window.location.href.split('#')[0]);
       tweet.href=`https://twitter.com/intent/tweet?text=${text}&url=${url}`;
+
+      renderLocalLB();       // show something immediately
+      loadGlobalLeaderboard(); // try remote
     })();
 
     window.addEventListener('load', reset);
   </script>
 </body>
 </html>
-
