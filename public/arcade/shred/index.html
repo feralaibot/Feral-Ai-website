@@ -6,15 +6,20 @@
   <title>Click to Shred — FANG</title>
   <style>
     :root{
-      --bg:#0a0b0f; /* deep space */
-      --fg:#e8e8e8; /* neutral */
-      --neon1:#00ffd5; /* cyan */
-      --neon2:#8a2be2; /* glitch purple */
-      --neon3:#ff004d; /* blood red */
-      --neon4:#00ff6e; /* toxic green */
-      --accent:#19c2ff; /* solana-ish */
+      --bg:#0a0b0f;
+      --fg:#e8e8e8;
+      --neon1:#00ffd5;
+      --neon2:#8a2be2;
+      --neon3:#ff004d;
+      --neon4:#00ff6e;
+      --accent:#19c2ff;
     }
-    html,body{height:100%;margin:0;background:radial-gradient(1200px 800px at 70% 20%, #111 0%, #090c10 35%, #05060a 100%);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,"Helvetica Neue",Arial,sans-serif;color:var(--fg);}
+    /* Page background uses the same image so edges outside canvas match */
+    html,body{
+      height:100%;margin:0;color:var(--fg);
+      background: #000 url('assets/bg4.jpeg') center / cover no-repeat fixed;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,"Helvetica Neue",Arial,sans-serif;
+    }
     .wrap{position:fixed;inset:0;display:grid;grid-template-rows:auto 1fr auto}
     header,footer{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;gap:8px}
     header{color:#a7b3c2;letter-spacing:.08em;text-transform:uppercase;font-weight:700;font-size:12px}
@@ -22,13 +27,13 @@
     header .dot{width:8px;height:8px;border-radius:999px;background:linear-gradient(135deg,var(--neon2),var(--neon1));box-shadow:0 0 12px var(--neon2)}
     #game{position:relative;display:grid;place-items:center}
 
-    /* Canvas styling (mobile-friendly) */
+    /* Canvas styling (no internal CSS bg, we draw bg image inside the canvas) */
     canvas{
       width:min(100vw,900px);
       height:calc(min(100vw,900px) * 0.6);
       max-height:78vh;
       border:1px solid rgba(255,255,255,.06);
-      background:linear-gradient(180deg, rgba(32,32,48,.35), rgba(6,8,14,.65));
+      background:rgba(0,0,0,.15);
       box-shadow:0 0 30px rgba(0,255,213,.08), inset 0 0 40px rgba(138,43,226,.08);
       border-radius:18px;
       touch-action:none; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none;
@@ -155,6 +160,8 @@
       for (const [key, src] of Object.entries(SPRITES)){
         IMAGES[key] = await loadImage(src);
       }
+      // also load the background image
+      BG_IMG = await loadImage(BG_SRC);
     }
 
     // Define kinds using sprites (r = click radius)
@@ -163,6 +170,10 @@
       {name:'BOT',    score:20, r:32, imgKey:'BOT'},
       {name:'CANDLE', score:30, r:34, imgKey:'CANDLE'}
     ];
+
+    // ---- BACKGROUND IMAGE ----
+    const BG_SRC = 'assets/bg4.jpeg';
+    let BG_IMG = null;
 
     let running=false, time=30, score=0, combo=1, lastSpawn=0, spawnEvery=650, animId=null;
 
@@ -186,8 +197,27 @@
       tweet.href = `https://twitter.com/intent/tweet?text=${text}&url=${url}`;
     }
 
+    // Draw background image INSIDE the canvas (cover behavior) + overlays
     function drawBG(){
       ctx.clearRect(0,0,W,H);
+
+      if (BG_IMG){
+        const iw = BG_IMG.width, ih = BG_IMG.height;
+        const cw = W, ch = H;
+        const ir = iw/ih, cr = cw/ch;
+        let dw, dh, dx, dy;
+        if (ir > cr){ // image wider than canvas: fit height, crop sides
+          dh = ch; dw = dh * ir; dx = (cw - dw)/2; dy = 0;
+        } else {     // image taller than canvas: fit width, crop top/bottom
+          dw = cw; dh = dw / ir; dx = 0; dy = (ch - dh)/2;
+        }
+        ctx.drawImage(BG_IMG, dx, dy, dw, dh);
+      } else {
+        // fallback solid bg
+        ctx.fillStyle = '#0a0b0f';
+        ctx.fillRect(0,0,W,H);
+      }
+
       // subtle grid
       ctx.save();
       ctx.globalAlpha = 0.08;
@@ -195,9 +225,11 @@
       for(let x=0;x<=W;x+=s){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
       for(let y=0;y<=H;y+=s){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
       ctx.restore();
+
       // vignette
       const g = ctx.createRadialGradient(W*0.5,H*0.5,10,W*0.5,H*0.5,Math.max(W,H)*0.6);
-      g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.6)');
+      g.addColorStop(0,'rgba(0,0,0,0)');
+      g.addColorStop(1,'rgba(0,0,0,0.6)');
       ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
     }
 
@@ -247,16 +279,14 @@
 
     function loop(ts){
       if(!running) return;
-      const dt = 16; // fixed-ish for spawn timing
+      const dt = 16;
       time -= dt/1000; if(time < 0){ time=0; end(); return; }
       timeEl.textContent = time.toFixed(1);
 
-      // dynamic spawn rate
       if(ts - lastSpawn > spawnEvery){
         spawn();
         lastSpawn = ts;
-        // ramp difficulty
-        if(spawnEvery>240) spawnEvery -= 6;
+        if(spawnEvery>240) spawnEvery -= 6; // ramp difficulty
       }
 
       drawBG();
@@ -328,13 +358,13 @@
       updateTweet();
     }
 
-    // Preload sprites on first Start
+    // Preload sprites + background on first Start
     startBtn.addEventListener('click', async ()=>{
-      if(!IMAGES.RUG){
+      if(!IMAGES.RUG || !BG_IMG){
         overlay.querySelector('.title').textContent = 'LOADING…';
-        overlay.querySelector('.hint').textContent = 'Fetching sprites.';
+        overlay.querySelector('.hint').textContent = 'Fetching assets.';
         try { await preloadSprites(); }
-        catch(e){ overlay.querySelector('.hint').textContent = 'Sprite load failed, using fallback shapes.'; }
+        catch(e){ overlay.querySelector('.hint').textContent = 'Asset load failed; using fallbacks.'; }
       }
       overlay.querySelector('.title').textContent='CLICK TO SHRED';
       overlay.querySelector('.hint').textContent='Glitch pests pop up. You’ve got 30 seconds. Click to shred and stack combo. Misses reset combo.';
@@ -348,8 +378,10 @@
       if(audioOn && !actx){ try{ actx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
     });
 
-    // initial draw
-    drawBG();
+    // Load background immediately so it's visible before Start
+    loadImage(BG_SRC).then(img => { BG_IMG = img; drawBG(); }).catch(()=>{ drawBG(); });
+
+    // initial tweet link
     updateTweet();
   </script>
 </body>
