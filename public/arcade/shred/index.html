@@ -100,6 +100,12 @@
             <button class="btn" id="start">Start</button>
             <button class="btn secondary" id="soundToggle">Sound: Off</button>
           </div>
+
+          <!-- Leaderboard (Top 10) -->
+          <div id="leaderboard" style="margin-top:14px">
+            <div class="tag" style="font-weight:800">Leaderboard (Top 10)</div>
+            <ol id="lbList" style="margin:6px 0 0 20px; padding:0"></ol>
+          </div>
         </div>
       </div>
     </main>
@@ -139,11 +145,32 @@
     const comboEl = document.getElementById('combo');
     const hiEl = document.getElementById('hi');
     const tweet = document.getElementById('tweet');
+    const lbList = document.getElementById('lbList');
 
     const W = canvas.width, H = canvas.height;
 
     // Highscore from localStorage
     let hi = parseInt(localStorage.getItem('fang_shred_hi')||'0',10); hiEl.textContent = hi;
+
+    // Leaderboard (top 10) in localStorage
+    const LB_KEY = 'fang_shred_lb';
+    function getLB(){ try{return JSON.parse(localStorage.getItem(LB_KEY)||'[]');}catch(_){return [];} }
+    function setLB(arr){ localStorage.setItem(LB_KEY, JSON.stringify(arr)); }
+    function renderLB(list = getLB()){
+      if(!lbList) return;
+      lbList.innerHTML = list.length
+        ? list.map((e,i)=>`<li>${e.s}</li>`).join('')
+        : '<li>No scores yet.</li>';
+    }
+    function addToLB(sc){
+      const lb = getLB();
+      lb.push({s: sc, t: Date.now()});
+      lb.sort((a,b)=>b.s - a.s);
+      setLB(lb.slice(0,10));
+      renderLB();
+    }
+
+    renderLB();
 
     const targets = [];
 
@@ -185,10 +212,24 @@
       overlay.style.display='grid';
       updateTweet();
       drawBG();
+      startBtn.textContent = 'Start'; // initial label
     }
 
+    // Ensure every run is a clean reset (timer/targets/state)
     function start(){
-      running=true; overlay.style.display='none'; lastSpawn=performance.now();
+      // full fresh run state
+      running=true;
+      time=30;
+      score=0;
+      combo=1;
+      spawnEvery=650;
+      targets.length=0;
+      scoreEl.textContent = score;
+      comboEl.textContent = 'x1';
+      timeEl.textContent = time.toFixed(1);
+
+      overlay.style.display='none';
+      lastSpawn=performance.now();
       loop(performance.now());
     }
 
@@ -285,11 +326,8 @@
       animId = requestAnimationFrame(loop);
     }
 
-    canvas.addEventListener('click', (e)=>{
+    function handleClickAt(x,y){
       if(!running) return;
-      const rect = canvas.getBoundingClientRect();
-      const x = (e.clientX - rect.left) * (canvas.width/rect.width);
-      const y = (e.clientY - rect.top) * (canvas.height/rect.height);
       let hit = -1;
       for(let i=targets.length-1;i>=0;i--){
         const t = targets[i];
@@ -305,42 +343,41 @@
       } else {
         combo = 1; comboEl.textContent='x'+combo; beep(220,0.08,0.04);
       }
+    }
+
+    canvas.addEventListener('click', (e)=>{
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (canvas.width/rect.width);
+      const y = (e.clientY - rect.top) * (canvas.height/rect.height);
+      handleClickAt(x,y);
     });
 
     canvas.addEventListener('touchstart', (e)=>{
-      if(!running) return;
       const t0 = e.changedTouches[0];
       const rect = canvas.getBoundingClientRect();
       const x = (t0.clientX - rect.left) * (canvas.width/rect.width);
       const y = (t0.clientY - rect.top) * (canvas.height/rect.height);
-      let hit = -1;
-      for(let i=targets.length-1;i>=0;i--){
-        const t = targets[i];
-        const dx=x-t.x, dy=y-t.y; if(dx*dx+dy*dy <= (t.r*1.1)*(t.r*1.1)){ hit=i; break; }
-      }
-      if(hit>=0){
-        const t = targets[hit];
-        targets.splice(hit,1);
-        score += Math.round(t.kind.score * combo);
-        scoreEl.textContent = score;
-        combo = Math.min(8, combo+0.25); comboEl.textContent='x'+combo.toFixed(2).replace(/\.00$/,'');
-        beep(880+Math.random()*200, 0.05, 0.06);
-      } else {
-        combo = 1; comboEl.textContent='x'+combo; beep(220,0.08,0.04);
-      }
+      handleClickAt(x,y);
       e.preventDefault();
     }, {passive:false});
 
     function end(){
       running=false; cancelAnimationFrame(animId);
+
+      // highscore update
       if(score>hi){ hi=score; localStorage.setItem('fang_shred_hi', String(hi)); hiEl.textContent=hi; }
+
+      // leaderboard update
+      addToLB(score);
+
       overlay.style.display='grid';
       overlay.querySelector('.title').textContent = 'RUN OVER';
-      overlay.querySelector('.hint').innerHTML = `Score: <strong>${score}</strong> | Highscore: <strong>${hi}</strong><br/>Tap Start to shred again.`;
+      overlay.querySelector('.hint').innerHTML = `Score: <strong>${score}</strong> | Highscore: <strong>${hi}</strong><br/>Tap Start Again to shred another run.`;
       updateTweet();
+      startBtn.textContent = 'Start Again';
     }
 
-    // Preload sprites on first Start
+    // Preload sprites on first Start, then start a clean run
     startBtn.addEventListener('click', async ()=>{
       if(!IMAGES.RUG){
         overlay.querySelector('.title').textContent = 'LOADING…';
@@ -350,9 +387,7 @@
       }
       overlay.querySelector('.title').textContent='CLICK TO SHRED';
       overlay.querySelector('.hint').textContent='Glitch pests pop up. You’ve got 30 seconds. Click to shred and stack combo. Misses reset combo.';
-      spawnEvery=650; score=0; combo=1;
-      scoreEl.textContent=score; comboEl.textContent='x1';
-      start();
+      start(); // <-- clean run every time
     });
 
     soundBtn.addEventListener('click', ()=>{
@@ -363,6 +398,8 @@
     // first frame
     drawBG();
     updateTweet();
+    // ensure initial UI state
+    reset();
   </script>
 </body>
 </html>
