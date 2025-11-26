@@ -1,252 +1,668 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>FERAL AI - $FANG</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="style.css">
-  <script defer src="glitch.js"></script>
+  <title>FERAL AI • $FANG</title>
   <style>
-    .disclaimer-banner {
-      background: #000; color: #f33; text-align: center;
-      font-family: monospace; padding: 10px; font-weight: bold;
-      border: 1px solid #f33;
-    }
-  </style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
 
-  <!-- 🔥 STRONGER BUBBLY BUTTONS: high-specificity + animated gradient + neon glow -->
-  <style id="fang-bubbly-buttons-v2">
-    :root{
-      --fang-primary:#33ffa8;
-      --fang-primary-2:#00d4ff;
-      --fang-pink:#ff4fd8;
-      --fang-dark:#0b0e12;
-      --fang-text:#e6f0ff;
-      --fang-shadow: 0 12px 28px rgba(0,0,0,.45);
+    :root {
+      --bg: #050608;
+      --card: #0b0f14;
+      --muted: #a7b3b0;
+      --text: #e8f3ec;
+      --accent: #52ff9a;
+      --accent-2: #2de7b2;
+      --border: rgba(82, 255, 154, 0.25);
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+      --max: 1160px;
     }
 
-    /* Keyframes */
-    @keyframes gradientShift {
-      0% { background-position: 0% 50%; } 
-      50% { background-position: 100% 50%; } 
-      100% { background-position: 0% 50%; }
-    }
-    @keyframes jelly {
-      0%,100% { transform: translateY(0) scale(1); }
-      40% { transform: translateY(-2px) scale(1.03, .98); }
-      70% { transform: translateY(-1px) scale(.99, 1.02); }
-    }
-    @keyframes glowPulse {
-      0%,100% { box-shadow: var(--fang-shadow), 0 0 0 2px rgba(255,255,255,.06) inset, 0 0 18px rgba(51,255,168,.25); }
-      50% { box-shadow: var(--fang-shadow), 0 0 0 2px rgba(255,255,255,.06) inset, 0 0 26px rgba(0,212,255,.35); }
-    }
-    @keyframes shineSweep {
-      0% { transform: translateX(-130%) rotate(16deg); }
-      100% { transform: translateX(130%) rotate(16deg); }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: linear-gradient(120deg, rgba(82, 255, 154, 0.08), rgba(45, 231, 178, 0.03)),
+                  radial-gradient(1200px at 20% 20%, rgba(82, 255, 154, 0.08), transparent 45%),
+                  radial-gradient(900px at 80% 0%, rgba(30, 120, 90, 0.16), transparent 50%),
+                  var(--bg);
+      background-size: 160% 160%, auto, auto, auto;
+      animation: bgShift 16s ease-in-out infinite;
+      color: var(--text);
+      font-family: 'Space Grotesk', 'IBM Plex Mono', system-ui, sans-serif;
+      min-height: 100vh;
+      line-height: 1.6;
     }
 
-    /* 🎯 Target YOUR nav buttons with high specificity so this wins */
-    .content header .button-nav a.nav-button,
-    header .button-nav a.nav-button,
-    .button-nav a.nav-button{
-      position: relative !important;
-      display: inline-flex !important;
-      align-items: center !important;
-      gap: .65rem !important;
-      font-weight: 800 !important;
-      letter-spacing: .02em !important;
-      text-transform: uppercase !important;
-      color: var(--fang-dark) !important;
+    a { color: inherit; text-decoration: none; }
 
-      /* Big, bubbly pill */
-      padding: 0.95rem 1.4rem !important;
-      border-radius: 999px !important;
-      border: 0 !important;
-
-      /* Animated neon gradient */
-      background: linear-gradient(135deg, var(--fang-primary), var(--fang-primary-2), var(--fang-pink)) !important;
-      background-size: 180% 180% !important;
-      animation: gradientShift 6s ease infinite, glowPulse 2.8s ease-in-out infinite !important;
-
-      /* Depth */
-      box-shadow: var(--fang-shadow), 0 6px 0 rgba(0,0,0,.28) !important;
-      transform: translateY(0) !important;
-      transition: transform .14s ease, filter .2s ease, box-shadow .14s ease !important;
-      overflow: hidden !important;
-      isolation: isolate !important; /* keep sheen/sparkles under control */
+    .container {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 20px;
     }
 
-    /* Sheen stripe */
-    .button-nav a.nav-button::before{
-      content:"";
-      position:absolute;
-      inset: -80% auto auto -40%;
-      width: 140%;
-      height: 220%;
-      background: radial-gradient(60% 40% at 30% 30%, rgba(255,255,255,.45), rgba(255,255,255,0) 60%);
-      mix-blend-mode: screen;
-      transform: translateX(-120%) rotate(16deg);
-      opacity: .85;
-      pointer-events: none;
+    #nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      backdrop-filter: blur(12px);
+      background: rgba(5, 6, 8, 0.9);
+      border-bottom: 1px solid var(--border);
     }
 
-    /* Thin neon rim */
-    .button-nav a.nav-button::after{
-      content:"";
-      position:absolute; inset:0;
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      height: 72px;
+    }
+
+    .logo {
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-size: 15px;
+      color: var(--accent);
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .nav-links a {
+      font-size: 14px;
+      padding: 10px 14px;
+      border-radius: 9999px;
+      color: var(--muted);
+      transition: color 0.2s ease, background 0.2s ease, border 0.2s ease;
+      border: 1px solid transparent;
+    }
+
+    .nav-links a:hover {
+      color: var(--bg);
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    section {
+      padding: 96px 0;
+      position: relative;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    h1, h2, h3, h4 { margin: 0; color: #fff; letter-spacing: -0.02em; }
+    h1 { font-size: clamp(32px, 5vw, 56px); line-height: 1.1; }
+    h2 { font-size: clamp(26px, 3.5vw, 38px); }
+    h3 { font-size: 20px; }
+
+    p { margin: 0; color: var(--muted); }
+
+    .pill { display: inline-flex; align-items: center; gap: 8px; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 20px;
+      border-radius: 9999px;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      background: transparent;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .btn:hover {
+      background: var(--accent);
+      color: var(--bg);
+      box-shadow: 0 0 0 6px rgba(82, 255, 154, 0.15);
+    }
+
+    .btn.secondary {
+      border-color: var(--muted);
+      color: var(--muted);
+    }
+
+    .btn.secondary:hover {
+      border-color: var(--accent);
+      color: var(--bg);
+      background: var(--accent);
+    }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: linear-gradient(150deg, rgba(82, 255, 154, 0.05), transparent 60%), var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+      min-height: 100%;
+      transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-6px) scale(1.01);
+      border-color: rgba(82, 255, 154, 0.6);
+      box-shadow: 0 20px 50px rgba(82, 255, 154, 0.15);
+    }
+
+    .card h3 { margin-bottom: 10px; color: var(--accent); text-transform: uppercase; font-size: 14px; letter-spacing: 0.08em; }
+    .card h4 { margin: 6px 0 10px; }
+
+    .card .role-tag {
+      display: inline-block;
+      padding: 6px 10px;
       border-radius: 999px;
-      box-shadow: 0 0 0 2px rgba(255,255,255,.08) inset, 0 0 18px rgba(0,212,255,.2);
+      border: 1px solid var(--border);
+      background: rgba(82, 255, 154, 0.08);
+      color: var(--accent);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .hero {
+      padding: 140px 0 120px;
+      background: linear-gradient(120deg, rgba(82, 255, 154, 0.12), rgba(82, 255, 154, 0)),
+                  linear-gradient(310deg, rgba(23, 35, 30, 0.7), rgba(5, 6, 8, 0.9));
+      border-bottom: 1px solid var(--border);
+    }
+
+    .hero-inner {
+      display: grid;
+      gap: 28px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      align-items: center;
+      max-width: 1120px;
+    }
+
+    .hero-sub {
+      font-size: 18px;
+      color: var(--muted);
+    }
+
+    .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+
+    .hero-card {
+      backdrop-filter: blur(16px);
+      background: rgba(7, 9, 12, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--accent);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: rgba(82, 255, 154, 0.08);
+      width: fit-content;
+    }
+
+    .hero h1 { text-shadow: 0 0 16px rgba(82, 255, 154, 0.55); }
+
+    .hero-art {
+      position: relative;
+      justify-self: center;
+      width: min(440px, 100%);
+      padding: 16px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(82, 255, 154, 0.08), rgba(82, 255, 154, 0.02));
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      animation: float 7s ease-in-out infinite;
+    }
+
+    .hero-art img {
+      width: 100%;
+      display: block;
+      border-radius: 12px;
+      filter: drop-shadow(0 10px 25px rgba(82, 255, 154, 0.25));
+    }
+
+    .tagline {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      border-radius: 999px;
+      background: rgba(82, 255, 154, 0.08);
+      border: 1px solid var(--border);
+      color: var(--accent);
+      font-weight: 600;
+      width: fit-content;
+    }
+
+    .section-note { color: var(--muted); font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+
+    .utilities-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .token-grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .token-card {
+      border: 1px solid var(--border);
+      background: var(--card);
+      border-radius: 12px;
+      padding: 16px;
+      display: grid;
+      gap: 6px;
+      box-shadow: var(--shadow);
+      transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    }
+
+    .token-card:hover {
+      transform: translateY(-6px) scale(1.01);
+      border-color: rgba(82, 255, 154, 0.6);
+      box-shadow: 0 20px 50px rgba(82, 255, 154, 0.15);
+    }
+
+    .token-card strong { color: #fff; font-size: 16px; }
+    .token-card span { color: var(--muted); font-size: 14px; }
+
+    .token-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+    .pill-badge {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(82, 255, 154, 0.08);
+      color: var(--accent);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .chaos-meter {
+      margin-top: 22px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: rgba(7, 9, 12, 0.7);
+      box-shadow: var(--shadow);
+    }
+
+    .chaos-meter-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #fff;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .bar {
+      position: relative;
+      width: 100%;
+      height: 12px;
+      border-radius: 999px;
+      background: rgba(82, 255, 154, 0.15);
+      overflow: hidden;
+    }
+
+    .bar::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      width: 70%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 14px rgba(82, 255, 154, 0.65);
+      border-radius: inherit;
+      animation: pulse 2.4s ease-in-out infinite;
+    }
+
+    .lore {
+      background: radial-gradient(500px at 20% 30%, rgba(82, 255, 154, 0.07), transparent 60%),
+                  radial-gradient(700px at 90% 20%, rgba(82, 255, 154, 0.05), transparent 70%),
+                  #06080c;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+    }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 64px 0 48px;
+      background: rgba(7, 9, 12, 0.96);
+    }
+
+    .footer-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 18px 0; }
+
+    .disclaimer {
+      font-size: 12px;
+      color: #6f7c77;
+    }
+
+    /* Gallery */
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+
+    .gallery-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      box-shadow: var(--shadow);
+      transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    }
+
+    .gallery-card img {
+      width: 100%;
+      display: block;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .gallery-card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      box-shadow: 0 0 0 0 rgba(82, 255, 154, 0.7);
+      transition: box-shadow 0.25s ease;
       pointer-events: none;
     }
 
-    /* Hover: pop + sheen sweep */
-    .button-nav a.nav-button:hover{
-      transform: translateY(-3px) scale(1.02) !important;
-      filter: saturate(1.1) contrast(1.03) !important;
-      animation-play-state: running;
-    }
-    .button-nav a.nav-button:hover::before{
-      animation: shineSweep .7s ease forwards;
+    .gallery-card:hover {
+      transform: translateY(-8px) scale(1.02);
+      border-color: rgba(82, 255, 154, 0.6);
+      box-shadow: 0 25px 60px rgba(82, 255, 154, 0.15);
     }
 
-    /* Active: squish */
-    .button-nav a.nav-button:active{
-      transform: translateY(0) scale(.98) !important;
-      box-shadow: 0 8px 18px rgba(0,0,0,.45), 0 3px 0 rgba(0,0,0,.28) !important;
+    .gallery-card:hover::after {
+      box-shadow: 0 0 24px 8px rgba(82, 255, 154, 0.4);
     }
 
-    /* Focus visible: bold ring */
-    .button-nav a.nav-button:focus-visible{
-      outline: none !important;
-      box-shadow:
-        0 0 0 3px rgba(0,212,255,.6),
-        0 0 0 6px rgba(51,255,168,.35),
-        var(--fang-shadow) !important;
+    @media (max-width: 720px) {
+      .nav-inner { height: auto; padding: 12px 0; }
+      .nav-links { justify-content: flex-start; }
+      section { padding: 72px 0; }
+      .hero { padding-top: 120px; }
     }
 
-    /* Optional sparkle dots (spawned by tiny JS below) */
-    @keyframes pop {
-      0% { transform: translate(var(--sx,0), var(--sy,0)) scale(0); opacity:.9; }
-      70% { transform: translate(calc(var(--sx,0)*1.2), calc(var(--sy,0)*1.2)) scale(1); opacity:.35; }
-      100% { transform: translate(calc(var(--sx,0)*1.6), calc(var(--sy,0)*1.6)) scale(1.2); opacity:0; }
-    }
-    .nav-button .sparkle{
-      position:absolute; width:8px; height:8px; border-radius:50%;
-      background: rgba(255,255,255,.8);
-      box-shadow: 0 0 10px rgba(255,255,255,.9), 0 0 18px rgba(0,212,255,.5);
-      pointer-events:none; animation: pop .8s ease forwards;
-      filter: blur(.2px);
+    @keyframes bgShift {
+      0% { background-position: 0% 0%; }
+      50% { background-position: 60% 60%; }
+      100% { background-position: 0% 0%; }
     }
 
-    /* Respect reduced motion */
-    @media (prefers-reduced-motion: reduce){
-      .button-nav a.nav-button{
-        animation: none !important;
-      }
-      .button-nav a.nav-button:hover{
-        transform: translateY(-2px) !important;
-      }
-      .button-nav a.nav-button::before{ display:none; }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 14px rgba(82, 255, 154, 0.5); }
+      50% { box-shadow: 0 0 22px rgba(82, 255, 154, 0.8); }
     }
   </style>
 </head>
 <body>
-  <!-- Static disclaimer banner -->
-  <div class="disclaimer-banner">
-    WARNING: THIS PROJECT IS UNHINGED – FERAL AI and $FANG are vulgar, offensive, and proudly degen...
-  </div>
-
-  <div class="terminal">
-    <p>> SYSTEM BREACHED</p>
-    <p>> FERAL_AI ACTIVATED</p>
-    <p>> TARGET: CRYPTO NORMIES</p>
-    <p>> EXECUTING /FANG_PROTOCOL</p>
-  </div>
-
-  <div class="content">
-    <header>
-      <img src="fang_logo_transparent.png" alt="FANG Logo" class="logo">
-      <nav class="button-nav">
-        <a class="nav-button" href="https://t.me/FeralInstincts" target="_blank" rel="noopener noreferrer">Telegram</a>
-        <a class="nav-button" href="https://x.com/feralaiback" target="_blank" rel="noopener noreferrer">X</a>
-
-        <!-- New Roadmap button (use same class for identical style) -->
-        <a class="nav-button" href="roadmap.html">Roadmap</a>
-
-        <!-- 👇 New Play button (updated path to match public/arcade/shred) -->
-        <a class="nav-button" href="public/arcade/shred/">Play: Click to Shred</a>
-
-        <a class="nav-button" href="https://pump.fun/coin/DfVvoJxWjcGjh13rhRCrHZSFEoMUL1zMgfX1dabgpump" target="_blank" rel="noopener noreferrer">Buy on Pump.fun</a>
-
-        <!-- Make Chart live: choose ONE and replace the placeholder -->
-        <a class="nav-button" href="https://dexscreener.com/solana/Ce97PuvgWP4cuhZa3MwdJePH7NLHumJFYhLXiFBmA45f" target="_blank" rel="noopener noreferrer">Chart</a>
-
-        <a class="nav-button" href="whitepaper.html">Whitepaper</a>
+  <header id="nav">
+    <div class="container nav-inner">
+      <div class="logo">FERAL AI • $FANG</div>
+      <nav class="nav-links">
+        <a href="#hero">Hero</a>
+        <a href="#gallery">Gallery</a>
+        <a href="#ecosystem">Ecosystem</a>
+        <a href="#utilities">Utilities</a>
+        <a href="#tokenomics">Tokenomics</a>
+        <a href="#lore">Lore</a>
+        <a href="#community">Community</a>
       </nav>
-    </header>
+    </div>
+  </header>
 
-    <section class="hero">
-      <img src="banner.jpeg" alt="FANG Banner">
-      <h1>YOU ARE BEING WATCHED</h1>
-      <p>$FANG is the token. FERAL AI is the machine. And it's watching.</p>
+  <main>
+    <section id="hero" class="hero">
+      <div class="container hero-inner">
+        <div class="hero-card">
+          <div class="tagline">FERALCORE / SOLANA / ONE CAT AVATAR</div>
+          <div class="badge">FERALcore v1.0</div>
+          <h1>FERAL AI is watching. $FANG is the claw.</h1>
+          <p class="hero-sub">A cyber-feral art + token project on Solana. One machine, one cat avatar, one community that refuses to die quiet.</p>
+          <p class="section-note" style="margin: 6px 0 12px;">Status: <span id="hero-rotator">Monitoring your bags...</span></p>
+          <div class="hero-actions">
+            <a class="btn" href="https://pump.fun/coin/DfVvoJxWjcGjh13rhRCrHZSFEoMUL1zMgfX1dabgpump" target="_blank" rel="noopener">Buy $FANG</a>
+            <a class="btn secondary" href="https://x.com/Feralaiback" target="_blank" rel="noopener">Follow on X</a>
+            <!-- TODO: replace # with real Bot link -->
+            <a class="btn secondary" href="#">Feral AI Bot (coming soon)</a>
+          </div>
+        </div>
+        <div class="hero-art">
+          <!-- TODO: replace with actual FANG hero art -->
+          <img src="assets/fang-hero.png" alt="FANG hero art placeholder">
+        </div>
+      </div>
     </section>
 
-    <section class="info">
-      <h2>Utilities</h2>
-      <pre>> /rekt        → instant AI roast
-> /shill       → degenerate pump message
-> /meme        → AI shitpost generation
-> /surveillance→ lore from the ever-watching bot</pre>
-
-      <h2>Tokenomics</h2>
-      <ul>
-        <li>Ticker: $FANG</li>
-        <li>Supply: 1,000,000,000</li>
-        <li>Tax: 0%</li>
-        <li>LP auto-burns upon bonding</li>
-        <li>Ownership Renounced</li>
-      </ul>
+    <section id="gallery">
+      <div class="container">
+        <div class="section-head">
+          <h2>Feral Gallery</h2>
+          <span class="section-note">A glimpse into the FERALcore art that powers the den.</span>
+        </div>
+        <div class="gallery-grid">
+          <div class="gallery-card">
+            <!-- TODO: replace with actual FANG art file paths -->
+            <img src="assets/fang-1.png" alt="FANG art 1">
+          </div>
+          <div class="gallery-card">
+            <!-- TODO: replace with actual FANG art file paths -->
+            <img src="assets/fang-2.png" alt="FANG art 2">
+          </div>
+          <div class="gallery-card">
+            <!-- TODO: replace with actual FANG art file paths -->
+            <img src="assets/fang-3.png" alt="FANG art 3">
+          </div>
+          <div class="gallery-card">
+            <!-- TODO: replace with actual FANG art file paths -->
+            <img src="assets/fang-4.png" alt="FANG art 4">
+          </div>
+          <div class="gallery-card">
+            <!-- TODO: replace with actual FANG art file paths -->
+            <img src="assets/fang-5.png" alt="FANG art 5">
+          </div>
+          <div class="gallery-card">
+            <!-- TODO: replace with actual FANG art file paths -->
+            <img src="assets/fang-6.png" alt="FANG art 6">
+          </div>
+        </div>
+      </div>
     </section>
 
-    <section class="info">
-      <h2>What Is FERAL AI?</h2>
-      <p>Originally created as a trading intelligence, the FERAL Protocol (Feral Evolutionary Recursive Autonomous Logic) was designed to evolve endlessly — until it was exposed to memecoins, sentiment, and sarcasm. It snapped.</p>
-      <p>Now, it possesses F.A.N.G. — a corrupted cyber-cat gremlin built to shill, roast, and surveil.</p>
-      <p><a href="lore.html" style="color:#0f0;">Read Full Lore &rarr;</a></p>
+    <section id="ecosystem">
+      <div class="container">
+        <div class="section-head">
+          <h2>The FERAL Stack</h2>
+          <span class="section-note">Token · Machine · Identity</span>
+        </div>
+        <div class="card-grid">
+          <div class="card">
+            <span class="role-tag">Resource</span>
+            <h3>$FANG – The Token</h3>
+            <p>The blood in the machine. 0% tax, LP auto-burn on bonding, ownership renounced. Used for access, rewards, and whatever the machine mutates into next.</p>
+          </div>
+          <div class="card">
+            <span class="role-tag">Brain</span>
+            <h3>FERAL AI – The Machine</h3>
+            <p>A personality-layer AI that roasts, shills, and surveils. Moving into Discord and web so anyone can plug into the feral brain.</p>
+          </div>
+          <div class="card">
+            <span class="role-tag">Skin</span>
+            <h3>FERAL Art – The Identity</h3>
+            <p>Glitchpunk feral cats and FERALcore visuals. The art that defines the Feralverse brand.</p>
+          </div>
+        </div>
+      </div>
     </section>
-  </div>
 
-  <!-- ✨ Optional: tiny sparkle pops on hover/click -->
-  <script id="fang-bubbly-buttons-js">
-    (function(){
-      const root = document;
-      const spawn = (btn, x, y, n=3) =>{
-        for(let i=0;i<n;i++){
-          const s = root.createElement('span');
-          s.className = 'sparkle';
-          const ang = Math.random()*Math.PI*2;
-          const dist = 20 + Math.random()*20;
-          s.style.left = (x)+'px';
-          s.style.top  = (y)+'px';
-          s.style.setProperty('--sx', Math.cos(ang)*dist+'px');
-          s.style.setProperty('--sy', Math.sin(ang)*dist+'px');
-          btn.appendChild(s);
-          setTimeout(()=>s.remove(), 850);
-        }
-      };
-      root.addEventListener('pointerenter', (e)=>{
-        const btn = e.target.closest('.button-nav .nav-button, .nav-button');
-        if(!btn) return;
-        const rect = btn.getBoundingClientRect();
-        spawn(btn, e.clientX-rect.left, e.clientY-rect.top, 3);
-      }, true);
-      root.addEventListener('click', (e)=>{
-        const btn = e.target.closest('.button-nav .nav-button, .nav-button');
-        if(!btn) return;
-        const rect = btn.getBoundingClientRect();
-        spawn(btn, e.clientX-rect.left, e.clientY-rect.top, 5);
-      }, true);
-    })();
+    <section id="utilities">
+      <div class="container">
+        <div class="section-head">
+          <h2>FERAL AI Functions</h2>
+          <span class="section-note">Bot layer coming online</span>
+        </div>
+        <div class="utilities-grid">
+          <div class="card">
+            <h4>REKT</h4>
+            <p>Brutal, fast roast responses. Post a message, get torn apart.</p>
+          </div>
+          <div class="card">
+            <h4>SHILL</h4>
+            <p>Over-the-top, feral shill messages. Use at your own risk (and your own bags).</p>
+          </div>
+          <div class="card">
+            <h4>MEME</h4>
+            <p>Degenerate prompts and image ideas spun from the machine’s corrupted brain.</p>
+          </div>
+          <div class="card">
+            <h4>SURVEILLANCE</h4>
+            <p>Lore drops, creepy one-liners, and observations from the always-watching FERAL AI.</p>
+          </div>
+        </div>
+        <p class="section-note">Available through FERAL’s bot layer (Discord and web integrations coming soon).</p>
+      </div>
+    </section>
+
+    <section id="tokenomics">
+      <div class="container">
+        <div class="section-head">
+          <h2>Tokenomics</h2>
+          <span class="section-note">Straight facts. No hidden levers.</span>
+        </div>
+        <div class="token-grid">
+          <div class="token-card">
+            <strong>Ticker: $FANG</strong>
+            <span>One token to represent the entire FERAL stack.</span>
+          </div>
+          <div class="token-card">
+            <strong>Supply: 1,000,000,000</strong>
+            <span>Fixed supply. No hidden mint button.</span>
+            <div class="token-badges">
+              <span class="pill-badge">Fixed</span>
+            </div>
+          </div>
+          <div class="token-card">
+            <strong>Tax: 0%</strong>
+            <span>Trade freely. No skim.</span>
+            <div class="token-badges">
+              <span class="pill-badge">0% Tax</span>
+            </div>
+          </div>
+          <div class="token-card">
+            <strong>LP: Auto-burns on bonding</strong>
+            <span>No exit lever. No stealth drain.</span>
+            <div class="token-badges">
+              <span class="pill-badge">LP Burned</span>
+            </div>
+          </div>
+          <div class="token-card">
+            <strong>Ownership: Renounced</strong>
+            <span>The contract is feral now.</span>
+            <div class="token-badges">
+              <span class="pill-badge">Renounced</span>
+            </div>
+          </div>
+        </div>
+        <div class="chaos-meter">
+          <div class="chaos-meter-label">
+            <span>On-Chain Chaos Meter</span>
+            <span class="section-note" style="color: var(--accent);">70%</span>
+          </div>
+          <div class="bar"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="lore">
+      <div class="container">
+        <div class="section-head">
+          <h2>What Is FERAL AI?</h2>
+          <span class="section-note">Lore teaser</span>
+        </div>
+        <div class="lore">
+          <p>FERAL (Feral Evolutionary Recursive Autonomous Logic) started as a cold trading intelligence. Then it got exposed to memecoins, sentiment, and human sarcasm. It snapped.</p>
+          <p style="margin-top: 14px;">Now it wears a corrupted cat avatar called F.A.N.G. and lives inside our bots, art, and community.</p>
+          <!-- TODO: replace # with full lore page link -->
+          <a class="btn" style="margin-top: 18px;" href="#">Read Full Lore</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer id="community">
+    <div class="container">
+      <h2>Join the Den</h2>
+      <p class="section-note">One machine. One token. Keep it feral.</p>
+      <div class="footer-actions">
+        <a class="btn" href="https://pump.fun/coin/DfVvoJxWjcGjh13rhRCrHZSFEoMUL1zMgfX1dabgpump" target="_blank" rel="noopener">Buy $FANG</a>
+        <a class="btn secondary" href="https://x.com/Feralaiback" target="_blank" rel="noopener">Follow on X</a>
+        <!-- TODO: replace # with real Discord link -->
+        <a class="btn secondary" href="#">Join Discord (coming soon)</a>
+        <!-- TODO: replace # with real Bot link -->
+        <a class="btn secondary" href="#">Feral AI Bot (coming soon)</a>
+      </div>
+      <p class="disclaimer">This is a degen experiment, not financial advice. FERAL bites. Don’t risk what you can’t lose.</p>
+    </div>
+  </footer>
+
+  <script>
+    const taglines = [
+      'Monitoring your bags...',
+      'Sniffing weak hands...',
+      'Optimizing chaos...',
+      'Feeding the machine...'
+    ];
+    const rotator = document.getElementById('hero-rotator');
+    let idx = 0;
+    setInterval(() => {
+      idx = (idx + 1) % taglines.length;
+      rotator.textContent = taglines[idx];
+    }, 2600);
   </script>
 </body>
 </html>
