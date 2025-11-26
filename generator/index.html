@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feral PNG Randomizer (Web)</title>
+  <style>
+    :root { color-scheme: light; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f172a; color: #e2e8f0; }
+    body { margin: 0; padding: 32px; display: flex; justify-content: center; }
+    .wrap { width: min(960px, 100%); background: #0b1223; border: 1px solid #1e293b; border-radius: 14px; padding: 28px 32px; box-shadow: 0 20px 70px rgba(0,0,0,0.35); }
+    h1 { margin: 0 0 12px; letter-spacing: -0.02em; }
+    p.lead { margin: 0 0 20px; color: #94a3b8; }
+    label { display: block; margin-top: 14px; font-weight: 600; }
+    input, textarea, button { width: 100%; box-sizing: border-box; margin-top: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid #1e293b; background: #0f172a; color: #e2e8f0; }
+    textarea { min-height: 160px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    input[type="file"] { padding: 6px 0; }
+    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+    button { cursor: pointer; background: linear-gradient(120deg, #d946ef, #8b5cf6); border: none; font-weight: 700; letter-spacing: 0.01em; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .status { margin-top: 14px; color: #38bdf8; font-weight: 600; }
+    .small { color: #94a3b8; font-size: 13px; margin-top: 4px; }
+    .inline { display: flex; align-items: center; gap: 10px; }
+    .inline input[type="checkbox"] { width: auto; margin-top: 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Feral PNG Randomizer</h1>
+    <p class="lead">Upload your layers zip, set supply, and download ready-to-mint images + metadata.</p>
+    <form id="genForm">
+      <label>Layers Zip (.zip containing layer folders with PNGs)
+        <input type="file" id="layers" accept=".zip" required>
+      </label>
+      <div class="row">
+        <div>
+          <label>Canvas Width
+            <input type="number" id="width" value="1024" min="1" required>
+          </label>
+        </div>
+        <div>
+          <label>Canvas Height
+            <input type="number" id="height" value="1024" min="1" required>
+          </label>
+        </div>
+        <div>
+          <label>Supply
+            <input type="number" id="supply" value="100" min="1" required>
+          </label>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Name Prefix
+            <input type="text" id="namePrefix" value="FERAL">
+          </label>
+        </div>
+        <div>
+          <label>Symbol
+            <input type="text" id="symbol" value="FERAL">
+          </label>
+        </div>
+        <div>
+          <label>Wallet Address
+            <input type="text" id="walletAddress" placeholder="Your payout address">
+          </label>
+        </div>
+      </div>
+      <label class="inline">
+        <input type="checkbox" id="unique" checked>
+        Enforce uniqueness (skip duplicates)
+      </label>
+      <label>Rules JSON (optional, { block: [], force: [] })
+        <textarea id="rules">{ "block": [], "force": [] }</textarea>
+        <div class="small">Same block/force structure as the desktop app.</div>
+      </label>
+      <label>API URL
+        <input type="text" id="apiUrl" value="/generate">
+        <div class="small">Keep as /generate when this page is served by the same server; otherwise, set your full API URL.</div>
+      </label>
+      <button type="submit" id="submit">Generate</button>
+      <div class="status" id="status"></div>
+    </form>
+  </div>
+  <script>
+    const statusEl = document.getElementById("status");
+    const submitBtn = document.getElementById("submit");
+
+    function setStatus(msg, isError = false) {
+      statusEl.textContent = msg;
+      statusEl.style.color = isError ? "#fda4af" : "#38bdf8";
+    }
+
+    function arrayBufferToBase64(buffer) {
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+      }
+      return btoa(binary);
+    }
+
+    document.getElementById("genForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const file = document.getElementById("layers").files[0];
+      if (!file) { setStatus("Please choose a layers zip.", true); return; }
+      submitBtn.disabled = true;
+      setStatus("Reading layers zip…");
+      try {
+        const buffer = await file.arrayBuffer();
+        const layersZipBase64 = arrayBufferToBase64(buffer);
+        let parsedRules = { block: [], force: [] };
+        const rulesText = document.getElementById("rules").value.trim();
+        if (rulesText) parsedRules = JSON.parse(rulesText);
+
+        const payload = {
+          layersZipBase64,
+          supply: Number(document.getElementById("supply").value || 0),
+          width: Number(document.getElementById("width").value || 0),
+          height: Number(document.getElementById("height").value || 0),
+          namePrefix: document.getElementById("namePrefix").value || "FERAL",
+          symbol: document.getElementById("symbol").value || "FERAL",
+          walletAddress: document.getElementById("walletAddress").value || "YOUR_WALLET",
+          unique: document.getElementById("unique").checked,
+          rules: parsedRules
+        };
+
+        const apiUrl = document.getElementById("apiUrl").value || "/generate";
+        setStatus("Generating on server…");
+        const resp = await fetch(apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || `HTTP ${resp.status}`);
+        }
+        const blob = await resp.blob();
+        const minted = resp.headers.get("x-minted");
+        setStatus(`Done. Minted ${minted || "?"}. Downloading…`);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "feral-nfts.zip";
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        setStatus("Download started.");
+      } catch (err) {
+        console.error(err);
+        setStatus(err.message || "Failed to generate.", true);
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
