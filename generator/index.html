@@ -29,7 +29,11 @@
     <p class="lead">Upload your layers zip, set supply, and download ready-to-mint images + metadata.</p>
     <form id="genForm">
       <label>Layers Zip (.zip containing layer folders with PNGs)
-        <input type="file" id="layers" accept=".zip" required>
+        <input type="file" id="layers" accept=".zip">
+      </label>
+      <label>Layers Folder (select the root folder that contains ordered subfolders)
+        <input type="file" id="folder" webkitdirectory directory>
+        <div class="small">Keeps your subfolder structure intact; we will zip it client-side for you.</div>
       </label>
       <div class="row">
         <div>
@@ -81,13 +85,21 @@
       <div class="status" id="status"></div>
     </form>
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script>
     const statusEl = document.getElementById("status");
     const submitBtn = document.getElementById("submit");
+    const folderInput = document.getElementById("folder");
+    const zipInput = document.getElementById("layers");
 
     function setStatus(msg, isError = false) {
       statusEl.textContent = msg;
       statusEl.style.color = isError ? "#fda4af" : "#38bdf8";
+    }
+
+    function stripRoot(path) {
+      const parts = (path || "").split(/\\/g).join("/").split("/");
+      return parts.length > 1 ? parts.slice(1).join("/") : parts[0];
     }
 
     function arrayBufferToBase64(buffer) {
@@ -100,15 +112,36 @@
       return btoa(binary);
     }
 
+    async function buildZipFromFolder(fileList) {
+      const zip = new JSZip();
+      const files = Array.from(fileList).sort((a, b) => (a.webkitRelativePath || a.name).localeCompare(b.webkitRelativePath || b.name));
+      for (const file of files) {
+        const buf = await file.arrayBuffer();
+        const path = stripRoot(file.webkitRelativePath || file.name);
+        zip.file(path, buf);
+      }
+      const base64 = await zip.generateAsync({ type: "base64" });
+      return base64;
+    }
+
     document.getElementById("genForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const file = document.getElementById("layers").files[0];
-      if (!file) { setStatus("Please choose a layers zip.", true); return; }
+      const folderFiles = folderInput.files && folderInput.files.length ? folderInput.files : null;
+      const zipFile = zipInput.files && zipInput.files.length ? zipInput.files[0] : null;
+      if (!folderFiles && !zipFile) { setStatus("Please select a folder or a zip with layers.", true); return; }
       submitBtn.disabled = true;
-      setStatus("Reading layers zip…");
       try {
-        const buffer = await file.arrayBuffer();
-        const layersZipBase64 = arrayBufferToBase64(buffer);
+        let layersZipBase64 = "";
+
+        if (folderFiles) {
+          setStatus("Zipping folder and preserving order…");
+          layersZipBase64 = await buildZipFromFolder(folderFiles);
+        } else if (zipFile) {
+          setStatus("Reading layers zip…");
+          const buffer = await zipFile.arrayBuffer();
+          layersZipBase64 = arrayBufferToBase64(buffer);
+        }
+
         let parsedRules = { block: [], force: [] };
         const rulesText = document.getElementById("rules").value.trim();
         if (rulesText) parsedRules = JSON.parse(rulesText);
