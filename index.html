@@ -441,6 +441,50 @@
       box-shadow: 0 0 24px 8px rgba(82, 255, 154, 0.4);
     }
 
+    /* Lightbox */
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 50;
+    }
+
+    .lightbox.active { display: flex; }
+
+    .lightbox img {
+      max-width: 90vw;
+      max-height: 90vh;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65), 0 0 40px rgba(82, 255, 154, 0.2);
+      background: #030406;
+    }
+
+    .lightbox button {
+      position: absolute;
+      top: 18px;
+      right: 18px;
+      background: rgba(7, 9, 12, 0.8);
+      color: var(--accent);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      transition: all 0.2s ease;
+    }
+
+    .lightbox button:hover {
+      background: var(--accent);
+      color: var(--bg);
+      box-shadow: 0 0 0 6px rgba(82, 255, 154, 0.18);
+    }
+
     @media (max-width: 720px) {
       .nav-inner { height: auto; padding: 12px 0; }
       .nav-links { justify-content: flex-start; }
@@ -649,48 +693,4 @@
     <section id="lore">
       <div class="container">
         <div class="section-head">
-          <h2>What Is FERAL AI?</h2>
-          <span class="section-note">Lore teaser</span>
-        </div>
-        <div class="lore">
-          <p>FERAL (Feral Evolutionary Recursive Autonomous Logic) started as a cold trading intelligence. Then it got exposed to memecoins, sentiment, and human sarcasm. It snapped.</p>
-          <p style="margin-top: 14px;">Now it wears a corrupted cat avatar called F.A.N.G. and lives inside our bots, art, and community.</p>
-          <!-- TODO: replace # with full lore page link -->
-          <a class="btn" style="margin-top: 18px;" href="#">Read Full Lore</a>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <footer id="community">
-    <div class="container">
-      <h2>Join the Den</h2>
-      <p class="section-note">One machine. One token. Keep it feral.</p>
-      <div class="footer-actions">
-        <a class="btn" href="https://pump.fun/coin/DfVvoJxWjcGjh13rhRCrHZSFEoMUL1zMgfX1dabgpump" target="_blank" rel="noopener">Buy $FANG</a>
-        <a class="btn secondary" href="https://x.com/Feralaiback" target="_blank" rel="noopener">Follow on X</a>
-        <!-- TODO: replace # with real Discord link -->
-        <a class="btn secondary" href="#">Join Discord (coming soon)</a>
-        <!-- TODO: replace # with real Bot link -->
-        <a class="btn secondary" href="#">Feral AI Bot (coming soon)</a>
-      </div>
-      <p class="disclaimer">This is a degen experiment, not financial advice. FERAL bites. Don’t risk what you can’t lose.</p>
-    </div>
-  </footer>
-
-  <script>
-    const taglines = [
-      'Monitoring your bags...',
-      'Sniffing weak hands...',
-      'Optimizing chaos...',
-      'Feeding the machine...'
-    ];
-    const rotator = document.getElementById('hero-rotator');
-    let idx = 0;
-    setInterval(() => {
-      idx = (idx + 1) % taglines.length;
-      rotator.textContent = taglines[idx];
-    }, 2600);
-  </script>
-</body>
-</html>
+       
