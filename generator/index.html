@@ -21,6 +21,21 @@
     .small { color: #94a3b8; font-size: 13px; margin-top: 4px; }
     .inline { display: flex; align-items: center; gap: 10px; }
     .inline input[type="checkbox"] { width: auto; margin-top: 0; }
+
+    /* Preview + weights */
+    .preview { margin-top: 24px; padding: 16px; border: 1px solid #1e293b; border-radius: 12px; background: #0f172a; }
+    .preview h3 { margin: 0 0 6px; }
+    .layers { display: grid; gap: 12px; }
+    .layer-card { border: 1px solid #1e293b; border-radius: 10px; padding: 12px; background: #0b1223; }
+    .layer-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .assets { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    .assets th, .assets td { padding: 6px; text-align: left; font-size: 14px; }
+    .assets th { color: #cbd5e1; }
+    .assets td { color: #e2e8f0; }
+    .weight-inputs { display: flex; gap: 8px; align-items: center; }
+    .weight-inputs input[type="range"] { flex: 1; }
+    .thumb { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid #1e293b; }
+    .flex-row { display: flex; gap: 12px; align-items: center; }
   </style>
 </head>
 <body>
@@ -84,6 +99,11 @@
       <button type="submit" id="submit">Generate</button>
       <div class="status" id="status"></div>
     </form>
+    <div class="preview" id="preview" style="display:none;">
+      <h3>Layers & Rarity</h3>
+      <div class="small" id="previewHint">Loaded layers will appear here.</div>
+      <div class="layers" id="layerList"></div>
+    </div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script>
@@ -91,6 +111,11 @@
     const submitBtn = document.getElementById("submit");
     const folderInput = document.getElementById("folder");
     const zipInput = document.getElementById("layers");
+    const previewEl = document.getElementById("preview");
+    const layerListEl = document.getElementById("layerList");
+    const previewHintEl = document.getElementById("previewHint");
+
+    let currentLayers = {}; // { layerName: [{ name, path, file?, getBlob }] }
 
     function setStatus(msg, isError = false) {
       statusEl.textContent = msg;
@@ -111,6 +136,194 @@
       }
       return btoa(binary);
     }
+
+    function resetPreview() {
+      currentLayers = {};
+      layerListEl.innerHTML = "";
+      previewEl.style.display = "none";
+    }
+
+    function updatePercents(layerCard) {
+      const rows = layerCard.querySelectorAll('[data-role="asset-row"]');
+      let total = 0;
+      rows.forEach(row => {
+        const weight = parseFloat(row.querySelector('[data-role="weight-number"]').value) || 0;
+        total += weight;
+      });
+      rows.forEach(row => {
+        const weight = parseFloat(row.querySelector('[data-role="weight-number"]').value) || 0;
+        const pctEl = row.querySelector('[data-role="percent"]');
+        const pct = total > 0 ? (weight / total) * 100 : 0;
+        pctEl.textContent = `${pct.toFixed(1)}%`;
+      });
+    }
+
+    function renderPreview() {
+      layerListEl.innerHTML = "";
+      const layerNames = Object.keys(currentLayers);
+      if (!layerNames.length) {
+        previewEl.style.display = "none";
+        return;
+      }
+      previewEl.style.display = "block";
+      previewHintEl.textContent = `${layerNames.length} layer(s) loaded. Adjust weights to set rarity.`;
+
+      layerNames.forEach(layer => {
+        const card = document.createElement('div');
+        card.className = 'layer-card';
+
+        const header = document.createElement('div');
+        header.className = 'layer-head';
+        header.innerHTML = `<strong>${layer}</strong><span class="small">${currentLayers[layer].length} assets</span>`;
+        card.appendChild(header);
+
+        const table = document.createElement('table');
+        table.className = 'assets';
+        const thead = document.createElement('thead');
+        thead.innerHTML = '<tr><th>Asset</th><th>Weight</th><th>Expected</th></tr>';
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        currentLayers[layer].forEach((asset, idx) => {
+          const tr = document.createElement('tr');
+          tr.setAttribute('data-role', 'asset-row');
+
+          const nameTd = document.createElement('td');
+          const rowWrap = document.createElement('div');
+          rowWrap.className = 'flex-row';
+          if (asset.thumbUrl) {
+            const img = document.createElement('img');
+            img.className = 'thumb';
+            img.src = asset.thumbUrl;
+            img.alt = asset.name;
+            rowWrap.appendChild(img);
+          }
+          const label = document.createElement('div');
+          label.innerHTML = `<div>${asset.name}</div><div class="small">${asset.path}</div>`;
+          rowWrap.appendChild(label);
+          nameTd.appendChild(rowWrap);
+
+          const weightTd = document.createElement('td');
+          const inputs = document.createElement('div');
+          inputs.className = 'weight-inputs';
+          const range = document.createElement('input');
+          range.type = 'range';
+          range.min = '0';
+          range.max = '100';
+          range.step = '0.1';
+          range.value = '1';
+          range.setAttribute('data-role', 'weight-range');
+          const num = document.createElement('input');
+          num.type = 'number';
+          num.min = '0';
+          num.step = '0.1';
+          num.value = '1';
+          num.style.width = '90px';
+          num.setAttribute('data-role', 'weight-number');
+          inputs.appendChild(range);
+          inputs.appendChild(num);
+          weightTd.appendChild(inputs);
+
+          const pctTd = document.createElement('td');
+          const pctSpan = document.createElement('span');
+          pctSpan.setAttribute('data-role', 'percent');
+          pctSpan.textContent = '—';
+          pctTd.appendChild(pctSpan);
+
+          tr.appendChild(nameTd);
+          tr.appendChild(weightTd);
+          tr.appendChild(pctTd);
+          tbody.appendChild(tr);
+
+          range.addEventListener('input', () => { num.value = range.value; updatePercents(card); });
+          num.addEventListener('input', () => { range.value = num.value; updatePercents(card); });
+        });
+
+        table.appendChild(tbody);
+        card.appendChild(table);
+        layerListEl.appendChild(card);
+        updatePercents(card);
+      });
+    }
+
+    async function loadFolderPreview(fileList) {
+      resetPreview();
+      const files = Array.from(fileList);
+      const imageFiles = files.filter(f => /\.(png|jpg|jpeg|webp)$/i.test(f.name));
+      const layersMap = {};
+      for (const file of imageFiles) {
+        const path = stripRoot(file.webkitRelativePath || file.name);
+        const parts = path.split('/');
+        if (parts.length < 2) continue; // need layer/asset
+        const layer = parts[0];
+        const assetName = parts.slice(1).join('/');
+        layersMap[layer] = layersMap[layer] || [];
+        layersMap[layer].push({ name: assetName, path, file });
+      }
+
+      // assign thumb urls (first asset per layer)
+      for (const layer of Object.keys(layersMap)) {
+        let thumbSet = false;
+        layersMap[layer].forEach(asset => {
+          if (!thumbSet && asset.file) {
+            asset.thumbUrl = URL.createObjectURL(asset.file);
+            thumbSet = true;
+          }
+        });
+      }
+      currentLayers = layersMap;
+      renderPreview();
+    }
+
+    async function loadZipPreview(file) {
+      resetPreview();
+      const buffer = await file.arrayBuffer();
+      const zip = new JSZip();
+      const loaded = await zip.loadAsync(buffer);
+      const layersMap = {};
+      const entries = Object.values(loaded.files).filter(e => !e.dir && /\.(png|jpg|jpeg|webp)$/i.test(e.name));
+      entries.sort((a, b) => a.name.localeCompare(b.name));
+
+      for (const entry of entries) {
+        const path = stripRoot(entry.name);
+        const parts = path.split('/');
+        if (parts.length < 2) continue;
+        const layer = parts[0];
+        const assetName = parts.slice(1).join('/');
+        layersMap[layer] = layersMap[layer] || [];
+        layersMap[layer].push({ name: assetName, path, entry });
+      }
+
+      // set thumb for first asset per layer
+      for (const layer of Object.keys(layersMap)) {
+        const first = layersMap[layer][0];
+        if (first && first.entry) {
+          const blob = await first.entry.async('blob');
+          const url = URL.createObjectURL(blob);
+          layersMap[layer].forEach((asset, idx) => {
+            if (idx === 0) asset.thumbUrl = url;
+          });
+        }
+      }
+      currentLayers = layersMap;
+      renderPreview();
+    }
+
+    folderInput.addEventListener('change', async (e) => {
+      if (e.target.files && e.target.files.length) {
+        await loadFolderPreview(e.target.files);
+      } else {
+        resetPreview();
+      }
+    });
+
+    zipInput.addEventListener('change', async (e) => {
+      if (e.target.files && e.target.files.length) {
+        await loadZipPreview(e.target.files[0]);
+      } else {
+        resetPreview();
+      }
+    });
 
     async function buildZipFromFolder(fileList) {
       const zip = new JSZip();
@@ -146,6 +359,20 @@
         const rulesText = document.getElementById("rules").value.trim();
         if (rulesText) parsedRules = JSON.parse(rulesText);
 
+        // Collect weights from UI
+        const weights = {};
+        layerListEl.querySelectorAll('.layer-card').forEach(card => {
+          const layerName = card.querySelector('.layer-head strong')?.textContent || '';
+          if (!layerName) return;
+          weights[layerName] = {};
+          card.querySelectorAll('[data-role="asset-row"]').forEach(row => {
+            const label = row.querySelector('div > div');
+            const assetName = label ? label.textContent.trim() : '';
+            const weightVal = parseFloat(row.querySelector('[data-role="weight-number"]').value) || 0;
+            if (assetName) weights[layerName][assetName] = weightVal;
+          });
+        });
+
         const payload = {
           layersZipBase64,
           supply: Number(document.getElementById("supply").value || 0),
@@ -155,7 +382,8 @@
           symbol: document.getElementById("symbol").value || "FERAL",
           walletAddress: document.getElementById("walletAddress").value || "YOUR_WALLET",
           unique: document.getElementById("unique").checked,
-          rules: parsedRules
+          rules: parsedRules,
+          weights
         };
 
         const apiUrl = document.getElementById("apiUrl").value || "/generate";
