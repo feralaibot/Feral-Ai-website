@@ -521,7 +521,7 @@
         <a href="#tokenomics">Tokenomics</a>
         <a href="#lore">Lore</a>
         <a href="#community">Community</a>
-        <a href="generator/index.html" target="_blank" rel="noopener">Generator</a>
+        <!-- Generator temporarily disabled -->
       </nav>
     </div>
   </header>
@@ -540,7 +540,7 @@
             <a class="btn secondary" href="https://x.com/Feralaiback" target="_blank" rel="noopener">Follow on X</a>
             <!-- TODO: replace # with real Bot link -->
             <a class="btn secondary" href="#">Feral AI Bot (coming soon)</a>
-            <a class="btn secondary" href="generator/index.html" target="_blank" rel="noopener">Open PNG Generator</a>
+            <!-- Generator temporarily disabled -->
           </div>
         </div>
         <a class="hero-art" href="https://launchmynft.io/collections/Bi2fJ1iBqzjc6nSHqpQruY43KEEG1bBwGDLmazF6xMGQ/QfbwNOnXVkjVsmfPzyzm" target="_blank" rel="noopener">
@@ -693,4 +693,85 @@
     <section id="lore">
       <div class="container">
         <div class="section-head">
-       
+          <h2>What Is FERAL AI?</h2>
+          <span class="section-note">Lore teaser</span>
+        </div>
+        <div class="lore">
+          <p>FERAL (Feral Evolutionary Recursive Autonomous Logic) started as a cold trading intelligence. Then it got exposed to memecoins, sentiment, and human sarcasm. It snapped.</p>
+          <p style="margin-top: 14px;">Now it wears a corrupted cat avatar called F.A.N.G. and lives inside our bots, art, and community.</p>
+          <!-- TODO: replace # with full lore page link -->
+          <a class="btn" style="margin-top: 18px;" href="#">Read Full Lore</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer id="community">
+    <div class="container">
+      <h2>Join the Den</h2>
+      <p class="section-note">One machine. One token. Keep it feral.</p>
+      <div class="footer-actions">
+        <a class="btn" href="https://pump.fun/coin/DfVvoJxWjcGjh13rhRCrHZSFEoMUL1zMgfX1dabgpump" target="_blank" rel="noopener">Buy $FANG</a>
+        <a class="btn secondary" href="https://x.com/Feralaiback" target="_blank" rel="noopener">Follow on X</a>
+        <!-- TODO: replace # with real Discord link -->
+        <a class="btn secondary" href="#">Join Discord (coming soon)</a>
+        <!-- TODO: replace # with real Bot link -->
+        <a class="btn secondary" href="#">Feral AI Bot (coming soon)</a>
+      </div>
+      <p class="disclaimer">This is a degen experiment, not financial advice. FERAL bites. Don’t risk what you can’t lose.</p>
+    </div>
+  </footer>
+
+  <div class="lightbox" id="lightbox" aria-hidden="true">
+    <button type="button" id="lightbox-close">Close ✕</button>
+    <img id="lightbox-img" alt="Expanded gallery art">
+  </div>
+
+  <script>
+    const taglines = [
+      'Monitoring your bags...',
+      'Sniffing weak hands...',
+      'Optimizing chaos...',
+      'Feeding the machine...'
+    ];
+    const rotator = document.getElementById('hero-rotator');
+    let idx = 0;
+    setInterval(() => {
+      idx = (idx + 1) % taglines.length;
+      rotator.textContent = taglines[idx];
+    }, 2600);
+  </script>
+  <script>
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = document.getElementById('lightbox-img');
+    const lightboxClose = document.getElementById('lightbox-close');
+
+    function openLightbox(src, alt) {
+      lightboxImg.src = src;
+      lightboxImg.alt = alt || 'Gallery art';
+      lightbox.classList.add('active');
+      lightbox.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeLightbox() {
+      lightbox.classList.remove('active');
+      lightbox.setAttribute('aria-hidden', 'true');
+      lightboxImg.src = '';
+    }
+
+    document.querySelectorAll('.gallery-card img').forEach(img => {
+      img.style.cursor = 'pointer';
+      img.addEventListener('click', () => openLightbox(img.src, img.alt));
+    });
+
+    lightbox.addEventListener('click', (e) => {
+      if (e.target === lightbox) closeLightbox();
+    });
+
+    lightboxClose.addEventListener('click', closeLightbox);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeLightbox();
+    });
+  </script>
+</body>
+</html>
