@@ -117,6 +117,12 @@
 
     let currentLayers = {}; // { layerName: [{ name, path, file?, getBlob }] }
 
+    function layerSortKey(name) {
+      const match = /^\s*(\d+)/.exec(name);
+      if (match) return [parseInt(match[1], 10), name];
+      return [Number.MAX_SAFE_INTEGER, name];
+    }
+
     function setStatus(msg, isError = false) {
       statusEl.textContent = msg;
       statusEl.style.color = isError ? "#fda4af" : "#38bdf8";
@@ -160,7 +166,12 @@
 
     function renderPreview() {
       layerListEl.innerHTML = "";
-      const layerNames = Object.keys(currentLayers);
+      const layerNames = Object.keys(currentLayers).sort((a, b) => {
+        const ka = layerSortKey(a);
+        const kb = layerSortKey(b);
+        if (ka[0] !== kb[0]) return ka[0] - kb[0];
+        return ka[1].localeCompare(kb[1]);
+      });
       if (!layerNames.length) {
         previewEl.style.display = "none";
         return;
@@ -250,6 +261,7 @@
       resetPreview();
       const files = Array.from(fileList);
       const imageFiles = files.filter(f => /\.(png|jpg|jpeg|webp)$/i.test(f.name));
+      imageFiles.sort((a, b) => (a.webkitRelativePath || a.name).localeCompare(b.webkitRelativePath || b.name));
       const layersMap = {};
       for (const file of imageFiles) {
         const path = stripRoot(file.webkitRelativePath || file.name);
@@ -263,6 +275,7 @@
 
       // assign thumb urls (first asset per layer)
       for (const layer of Object.keys(layersMap)) {
+        layersMap[layer].sort((a, b) => a.path.localeCompare(b.path));
         let thumbSet = false;
         layersMap[layer].forEach(asset => {
           if (!thumbSet && asset.file) {
@@ -296,6 +309,7 @@
 
       // set thumb for first asset per layer
       for (const layer of Object.keys(layersMap)) {
+        layersMap[layer].sort((a, b) => a.path.localeCompare(b.path));
         const first = layersMap[layer][0];
         if (first && first.entry) {
           const blob = await first.entry.async('blob');
