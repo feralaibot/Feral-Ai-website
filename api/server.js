@@ -6,7 +6,8 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+// Raise body limit to handle larger base64 zips from the generator UI.
+app.use(express.json({ limit: '200mb' }));
 
 app.get('/', (_req, res) => {
   res.json({ status: 'ok', message: 'FERAL generator API is alive. POST /generate to use it.' });
