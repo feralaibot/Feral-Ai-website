@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>FANG Generator</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self';">
+    <link rel="stylesheet" href="./style.css">
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero">
+        <div>
+          <div class="hero-kicker">Generative art toolkit</div>
+          <div class="header">FANG Generator</div>
+          <p class="small hero-subtitle">Pick input &amp; output folders, set options, define rules, then Generate.</p>
+        </div>
+        <div class="hero-meta">
+          <span class="pill">Now with quick trait uploads</span>
+        </div>
+      </header>
+
+      <section class="panel glass">
+        <div class="controls">
+          <button id="btnLayers">Select Input Folder…</button>
+          <span class="path" id="layersPath"></span>
+
+          <button id="btnOut" disabled>Outputs as ZIP download</button>
+          <span class="path" id="outPath">No folder needed; downloads to your browser.</span>
+        </div>
+
+        <div class="controls stackable">
+          <div class="field">Canvas:
+            <input id="w" type="number" value="1024"> ×
+            <input id="h" type="number" value="1024">
+          </div>
+          <div class="field">Supply: <input id="supply" type="number" value="100"></div>
+          <div class="field">Name: <input id="namePrefix" type="text" value="FANG"></div>
+          <div class="field">Symbol: <input id="symbol" type="text" value="FANG"></div>
+          <div class="field">Creator Wallet: <input id="wallet" type="text" value="YOUR_WALLET"></div>
+        </div>
+      </section>
+
+      <section class="panel glass">
+        <div class="section-head">
+          <h3>Layers <span class="small">(top → bottom)</span></h3>
+          <div class="actions">
+            <button id="expandAll">Expand all</button>
+            <button id="collapseAll">Collapse all</button>
+          </div>
+        </div>
+
+        <!-- Scrollable panel for many layers -->
+        <div id="layersScroll" class="scroll-panel">
+          <div id="layersContainer"></div>
+        </div>
+      </section>
+
+      <section class="panel glass">
+        <div class="section-head">
+          <h3>Rules</h3>
+          <div class="actions">
+            <button id="addBlock">+ Add Block</button>
+            <button id="addForce">+ Add Force</button>
+          </div>
+        </div>
+        <div id="rulesScroll" class="scroll-panel small-pad">
+          <div class="card">
+            <div class="rule-head">
+              <strong>Block rules</strong> <span class="small">A cannot appear with B</span>
+            </div>
+            <div id="blockRules" class="rules-grid"></div>
+          </div>
+
+          <div class="card">
+            <div class="rule-head">
+              <strong>Force rules</strong> <span class="small">If A, then require B (use “None” to hide)</span>
+            </div>
+            <div id="forceRules" class="rules-grid"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel glass action-bar">
+        <button id="btnGenerate" class="primary">Generate</button>
+        <div class="status" id="status">Ready.</div>
+      </section>
+    </div>
+
+    <script type="module" src="./renderer.js"></script>
+  </body>
+</html>
