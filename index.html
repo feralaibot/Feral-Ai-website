@@ -84,6 +84,18 @@
       border: 1px solid transparent;
     }
 
+    .nav-links .nav-cta {
+      color: var(--bg);
+      background: var(--accent);
+      border-color: var(--accent);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .nav-links .nav-cta:hover {
+      box-shadow: 0 0 0 6px rgba(82, 255, 154, 0.15);
+    }
+
     .nav-links a:hover {
       color: var(--bg);
       background: var(--accent);
@@ -515,13 +527,13 @@
       <div class="logo">FERAL AI • $FANG</div>
       <nav class="nav-links">
         <a href="https://launchmynft.io/collections/Bi2fJ1iBqzjc6nSHqpQruY43KEEG1bBwGDLmazF6xMGQ/QfbwNOnXVkjVsmfPzyzm" target="_blank" rel="noopener">Mint</a>
+        <a class="nav-cta" href="generator/index.html" target="_blank" rel="noopener">Generator</a>
         <a href="#gallery">Gallery</a>
         <a href="#ecosystem">Ecosystem</a>
         <a href="#utilities">Utilities</a>
         <a href="#tokenomics">Tokenomics</a>
         <a href="#lore">Lore</a>
         <a href="#community">Community</a>
-        <!-- Generator temporarily disabled -->
       </nav>
     </div>
   </header>
@@ -539,7 +551,7 @@
             <a class="btn" href="https://pump.fun/coin/DfVvoJxWjcGjh13rhRCrHZSFEoMUL1zMgfX1dabgpump" target="_blank" rel="noopener">Buy $FANG</a>
             <a class="btn secondary" href="https://x.com/Feralaiback" target="_blank" rel="noopener">Follow on X</a>
             <a class="btn secondary" href="https://feralai.onrender.com/" target="_blank" rel="noopener">fang bot</a>
-            <!-- Generator temporarily disabled -->
+            <a class="btn secondary" href="generator/index.html" target="_blank" rel="noopener">Open generator</a>
           </div>
         </div>
         <a class="hero-art" href="https://launchmynft.io/collections/Bi2fJ1iBqzjc6nSHqpQruY43KEEG1bBwGDLmazF6xMGQ/QfbwNOnXVkjVsmfPzyzm" target="_blank" rel="noopener">
@@ -761,15 +773,3 @@
       img.style.cursor = 'pointer';
       img.addEventListener('click', () => openLightbox(img.src, img.alt));
     });
-
-    lightbox.addEventListener('click', (e) => {
-      if (e.target === lightbox) closeLightbox();
-    });
-
-    lightboxClose.addEventListener('click', closeLightbox);
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeLightbox();
-    });
-  </script>
-</body>
-</html>
