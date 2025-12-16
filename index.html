@@ -528,11 +528,6 @@
       <nav class="nav-links">
         <a href="https://launchmynft.io/collections/Bi2fJ1iBqzjc6nSHqpQruY43KEEG1bBwGDLmazF6xMGQ/QfbwNOnXVkjVsmfPzyzm" target="_blank" rel="noopener">Mint</a>
         <a class="nav-cta" href="generator/index.html" target="_blank" rel="noopener">Generator</a>
-        <a href="#gallery">Gallery</a>
-        <a href="#ecosystem">Ecosystem</a>
-        <a href="#utilities">Utilities</a>
-        <a href="#tokenomics">Tokenomics</a>
-        <a href="#lore">Lore</a>
         <a href="#community">Community</a>
       </nav>
     </div>
@@ -773,3 +768,15 @@
       img.style.cursor = 'pointer';
       img.addEventListener('click', () => openLightbox(img.src, img.alt));
     });
+
+    lightbox.addEventListener('click', (e) => {
+      if (e.target === lightbox) closeLightbox();
+    });
+
+    lightboxClose.addEventListener('click', closeLightbox);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeLightbox();
+    });
+  </script>
+</body>
+</html>
