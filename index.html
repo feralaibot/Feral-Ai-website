@@ -497,6 +497,101 @@
       box-shadow: 0 0 0 6px rgba(82, 255, 154, 0.18);
     }
 
+    /* FERALcore PFP Filter */
+    .feralcore-card {
+      display: grid;
+      gap: 22px;
+    }
+
+    .feralcore-controls {
+      display: grid;
+      gap: 12px;
+    }
+
+    .feralcore-controls label {
+      font-size: 14px;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .feralcore-controls input[type="file"],
+    .feralcore-controls textarea {
+      width: 100%;
+      background: rgba(5, 6, 8, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-family: inherit;
+    }
+
+    .feralcore-controls textarea {
+      min-height: 110px;
+      resize: vertical;
+    }
+
+    .feralcore-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .feralcore-status {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(7, 9, 12, 0.6);
+      color: var(--muted);
+      font-size: 13px;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
+    .feralcore-status.is-error {
+      border-color: rgba(255, 120, 120, 0.6);
+      color: #ffb3b3;
+    }
+
+    .feralcore-previews {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .feralcore-preview {
+      display: grid;
+      gap: 10px;
+    }
+
+    .feralcore-preview span {
+      color: var(--muted);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .feralcore-frame {
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: rgba(7, 9, 12, 0.7);
+      padding: 12px;
+      min-height: 220px;
+      display: grid;
+      place-items: center;
+    }
+
+    .feralcore-frame img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 10px;
+      display: block;
+    }
+
+    .feralcore-download[disabled] {
+      opacity: 0.5;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
     @media (max-width: 720px) {
       .nav-inner { height: auto; padding: 12px 0; }
       .nav-links { justify-content: flex-start; }
@@ -527,6 +622,7 @@
       <div class="logo">FERAL AI • $FANG</div>
       <nav class="nav-links">
         <a href="https://launchmynft.io/collections/Bi2fJ1iBqzjc6nSHqpQruY43KEEG1bBwGDLmazF6xMGQ/QfbwNOnXVkjVsmfPzyzm" target="_blank" rel="noopener">Mint</a>
+        <a class="nav-cta" href="#pfp-filter">PFP Filter</a>
         <a class="nav-cta" href="generator/index.html" target="_blank" rel="noopener">Generator</a>
         <a href="#community">Community</a>
       </nav>
@@ -554,6 +650,42 @@
           <img src="fang-hero.png" alt="FANG hero art placeholder">
           <span class="mint-button">Mint here</span>
         </a>
+      </div>
+    </section>
+
+    <section id="pfp-filter">
+      <div class="container">
+        <div class="section-head">
+          <h2>FERALcore PFP Filter</h2>
+          <span class="section-note">Style-only filter: preserve face and silhouette. No identity morphing.</span>
+        </div>
+        <div class="card feralcore-card">
+          <div class="feralcore-controls">
+            <label for="feralcore-file">Upload image (png/jpg/webp, max 8MB)</label>
+            <input id="feralcore-file" type="file" accept="image/png,image/jpeg,image/webp">
+            <label for="feralcore-prompt">Style notes (optional)</label>
+            <textarea id="feralcore-prompt" placeholder="Extra style notes only. No character morphing."></textarea>
+            <div class="feralcore-actions">
+              <button class="btn" id="feralcore-generate" type="button">Generate FERALcore</button>
+              <button class="btn secondary feralcore-download" id="feralcore-download" type="button" disabled>Download Result</button>
+            </div>
+            <div class="feralcore-status" id="feralcore-status">Status: idle</div>
+          </div>
+          <div class="feralcore-previews">
+            <div class="feralcore-preview">
+              <span>Original</span>
+              <div class="feralcore-frame">
+                <img id="feralcore-original" alt="Original preview" src="">
+              </div>
+            </div>
+            <div class="feralcore-preview">
+              <span>FERALcore</span>
+              <div class="feralcore-frame">
+                <img id="feralcore-output" alt="FERALcore preview" src="">
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -719,8 +851,7 @@
       <div class="footer-actions">
         <a class="btn" href="https://pump.fun/coin/DfVvoJxWjcGjh13rhRCrHZSFEoMUL1zMgfX1dabgpump" target="_blank" rel="noopener">Buy $FANG</a>
         <a class="btn secondary" href="https://x.com/Feralaiback" target="_blank" rel="noopener">Follow on X</a>
-        <!-- TODO: replace # with real Discord link -->
-        <a class="btn secondary" href="#">Join Discord (coming soon)</a>
+        <a class="btn secondary" href="https://discord.gg/M2b8xwpS">Join Discord</a>
         <a class="btn secondary" href="https://feralai.onrender.com/" target="_blank" rel="noopener">fang bot</a>
       </div>
       <p class="disclaimer">This is a degen experiment, not financial advice. FERAL bites. Don’t risk what you can’t lose.</p>
@@ -778,5 +909,6 @@
       if (e.key === 'Escape') closeLightbox();
     });
   </script>
+  <script src="assets/feralcore.js"></script>
 </body>
 </html>
