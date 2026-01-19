@@ -74,13 +74,16 @@ export type AllowedAsset = {
   collection: string | null;
 };
 
+const PROJECT_ROOT = process.cwd();
 const ALLOWED_ASSETS_PATH = path.resolve(
-  import.meta.dirname,
+  PROJECT_ROOT,
+  "server",
   "config",
   "allowed-assets.json",
 );
 const WALLET_REPUTATION_PATH = path.resolve(
-  import.meta.dirname,
+  PROJECT_ROOT,
+  "server",
   "config",
   "wallet-reputation.json",
 );
