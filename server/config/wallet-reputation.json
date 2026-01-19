@@ -1,0 +1,79 @@
+{
+  "allowlist": {
+    "marketplaces": ["Magic Eden", "Tensor", "Hyperspace", "Exchange Art", "Solanart"],
+    "defi_programs_or_apps": ["Jupiter", "Raydium", "Orca", "Phoenix", "Meteora", "Drift", "MarginFi", "Solend"],
+    "infra_tooling": ["Helius", "Backpack", "xNFT"],
+    "reputable_collections_tier_A": [
+      "Solana Monkey Business",
+      "DeGods",
+      "Mad Lads",
+      "Degenerate Ape Academy",
+      "Famous Fox Federation",
+      "Aurory",
+      "Okay Bears"
+    ],
+    "reputable_collections_tier_B": ["Taiyo Robotics", "Shadowy Super Coder", "Claynosaurz", "y00ts"]
+  },
+  "denylist": {
+    "source_terms": [],
+    "program_ids": [],
+    "hard_negative_terms": [],
+    "behavioral_rules": {
+      "fresh_wallet_under_days": 7,
+      "mint_and_dump_under_minutes": 60,
+      "high_outbound_rate_threshold": 0.7
+    }
+  },
+  "labels": [
+    {
+      "id": "FERAL_PRIME",
+      "label": "FERAL Prime",
+      "meaning": "Top-tier. Aged wallet, long holds, consistent legit Solana usage."
+    },
+    {
+      "id": "DIAMOND_PAW",
+      "label": "Diamond Paw",
+      "meaning": "Strong holder behavior. Holds through volatility; low flip-rate."
+    },
+    {
+      "id": "STEEL_PAW",
+      "label": "Steel Paw",
+      "meaning": "Active trader but not toxic. Uses legit apps; healthy activity."
+    },
+    {
+      "id": "NEUTRAL_FERAL",
+      "label": "Neutral Feral",
+      "meaning": "Not enough signal either way."
+    },
+    {
+      "id": "PAPER_PAW",
+      "label": "Paper Paw",
+      "meaning": "Short holds / quick exits / frequent flips."
+    },
+    {
+      "id": "JEETLING",
+      "label": "Jeetling",
+      "meaning": "Repeated instant-dump patterns; serial paperhands behavior."
+    },
+    {
+      "id": "NULL_SIGNAL",
+      "label": "NULL Signal",
+      "meaning": "Obfuscation-heavy and suspicious; watchlist."
+    },
+    {
+      "id": "VOID_LEECH",
+      "label": "Void Leech",
+      "meaning": "Exploit/scam-adjacent patterns; sybil/farm/drain infrastructure touch."
+    }
+  ],
+  "label_thresholds": [
+    { "min_score": 25, "label_id": "FERAL_PRIME" },
+    { "min_score": 15, "label_id": "DIAMOND_PAW" },
+    { "min_score": 8, "label_id": "STEEL_PAW" },
+    { "min_score": -7, "label_id": "NEUTRAL_FERAL" },
+    { "min_score": -15, "label_id": "PAPER_PAW" },
+    { "min_score": -25, "label_id": "JEETLING" },
+    { "min_score": -60, "label_id": "NULL_SIGNAL" },
+    { "min_score": -9999, "label_id": "VOID_LEECH" }
+  ]
+}
