@@ -1,0 +1,1046 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import logging
+import threading
+import re
+from io import BytesIO
+import asyncio
+import html
+import requests
+import replicate
+from html.parser import HTMLParser
+from flask import Flask
+from PIL import Image, ImageDraw, ImageFont
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, MessageHandler,
+    ContextTypes, filters
+)
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+from telegram.constants import ChatType
+import time as _time
+from langdetect import detect, DetectorFactory
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from prune_feature import register_prune_feature
+
+# === onchain helpers (your keyless lookups + QUANT live there) ===
+from onchain import (
+    extract_mint, dex_token, format_token_card, holders_brief, ai_quant_analyze,
+    learn_topic, watch_add, watch_rm, watch_all, poll_alerts, LEARN
+)
+
+# --------------------------------------------------------------------------------------
+# HTTP session (shared)
+# --------------------------------------------------------------------------------------
+_sess = requests.Session()
+_retry = Retry(total=2, backoff_factor=0.3, status_forcelist=(429, 500, 502, 503, 504))
+_sess.mount("https://", HTTPAdapter(max_retries=_retry))
+
+# --------------------------------------------------------------------------------------
+# Basic setup & env
+# --------------------------------------------------------------------------------------
+logging.basicConfig(level=logging.INFO)
+
+REQUIRED_ENV = ["BOT_TOKEN", "OPENROUTER_API_KEY", "REPLICATE_API_KEY", "TELEGRAM_CHAT_ID"]
+missing = [k for k in REQUIRED_ENV if not os.environ.get(k)]
+if missing:
+    print(f"❌ Missing required environment variables: {', '.join(missing)}", flush=True)
+    sys.exit(1)
+
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+OPENROUTER_API_KEY = os.environ["OPENROUTER_API_KEY"]
+REPLICATE_API_KEY = os.environ["REPLICATE_API_KEY"]
+os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_KEY
+TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+try:
+    TELEGRAM_CHAT_ID = int(TELEGRAM_CHAT_ID)
+except ValueError:
+    pass
+
+# --------------------------------------------------------------------------------------
+# Constants
+# --------------------------------------------------------------------------------------
+FANG_WEBSITE = "https://rektbyai.wtf"
+# >>> BUY FLOW ADDITIONS: Phantom download URL
+PHANTOM_DOWNLOAD = "https://phantom.app/download"
+# <<< BUY FLOW ADDITIONS
+COINGECKO = "https://api.coingecko.com/api/v3"
+FNG_API   = "https://api.alternative.me/fng/"
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "mistralai/devstral-small-2505:free")
+FALLBACK_MODEL = "openchat/openchat-3.5-0106"
+
+CONTRACT_ADDRESS = os.environ.get("CONTRACT_ADDRESS", "DfVvoJxWjcGjh13rhRCrHZSFEoMUL1zMgfX1dabgpump")
+WATCHLIST_CG_IDS = os.environ.get("WATCHLIST_CG_IDS", "").strip()
+
+# Feral Prophecy cadence
+PROPHECY_INTERVAL_HOURS = 6
+QUIET_HOURS_LOCAL = (1, 8)
+LOCAL_TZ = ZoneInfo("America/Vancouver")
+
+# Lore cache
+LORE_URL = "https://rektbyai.wtf/lore.html"
+LORE_LOCAL_PATH = "lore.txt"
+LORE_CACHE_TTL = 3600
+_LORE_CACHE = {"text": None, "timestamp": 0}
+
+# --------------------------------------------------------------------------------------
+# Minimal HTML -> plain text
+# --------------------------------------------------------------------------------------
+class _HTMLToText(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.out = []
+    def handle_starttag(self, tag, attrs):
+        t = tag.lower()
+        if t in ("p","div","section","article","h1","h2","h3","h4","br","li"):
+            self.out.append("\n")
+        if t == "li":
+            self.out.append("• ")
+    def handle_data(self, data):
+        self.out.append(data.replace("\r","").replace("\t"," "))
+
+def _html_to_text(html_str: str) -> str:
+    parser = _HTMLToText()
+    parser.feed(html_str or "")
+    raw = "".join(parser.out)
+    raw = html.unescape(raw)
+    raw = re.sub(r"\n{3,}", "\n\n", raw)
+    raw = re.sub(r"[ \t]{2,}", " ", raw)
+    return raw.strip()
+
+def _read_local_lore() -> str:
+    try:
+        if os.path.exists(LORE_LOCAL_PATH):
+            with open(LORE_LOCAL_PATH, "r", encoding="utf-8") as f:
+                return f.read().strip()
+    except Exception:
+        pass
+    return ""
+
+def _fetch_remote_lore() -> str:
+    if not LORE_URL:
+        return ""
+    try:
+        r = _sess.get(LORE_URL, timeout=10)
+        r.raise_for_status()
+        ct = (r.headers.get("Content-Type") or "").lower()
+        body = r.text or ""
+        if "application/json" in ct or LORE_URL.endswith(".json"):
+            data = r.json()
+            t = (data.get("text") or data.get("lore") or "").strip()
+            title = (data.get("title") or "").strip()
+            return f"{title}\n\n{t}".strip() if (title and t) else t
+        if "text/html" in ct or LORE_URL.endswith(".html") or "<html" in body.lower():
+            return _html_to_text(body)
+        return body.strip()
+    except Exception as e:
+        logging.warning(f"[LORE] fetch failed: {e}")
+        return ""
+
+def get_lore_text(force_refresh: bool = False) -> str:
+    now = _time.time()
+    if not force_refresh and _LORE_CACHE["text"] and (now - _LORE_CACHE["timestamp"] < LORE_CACHE_TTL):
+        return _LORE_CACHE["text"]
+    text = _fetch_remote_lore() or _read_local_lore()
+    safe = html.escape(text).replace("\r\n","\n").strip()
+    _LORE_CACHE.update({"text": safe, "timestamp": now})
+    return safe
+
+def _split_for_telegram(s: str, limit: int = 3900) -> list[str]:
+    parts = []
+    s = s or ""
+    while len(s) > limit:
+        cut = s.rfind("\n", 0, limit)
+        if cut == -1: cut = limit
+        parts.append(s[:cut])
+        s = s[cut:].lstrip("\n")
+    if s: parts.append(s)
+    return parts
+
+def jupiter_url(mint: str, input_sym: str = "SOL") -> str:
+    """Deep link to swap from SOL into the token on Jupiter."""
+    return f"https://jup.ag/swap/{input_sym.upper()}-{mint}"
+
+# >>> BUY FLOW ADDITIONS: helper to render buy/phantom help
+def buy_help_text(mint: str) -> str:
+    return (
+        "<b>How to get $FANG</b>\n"
+        "1) Install Phantom & create a wallet (save the seed phrase OFFLINE).\n"
+        "2) Add a bit of SOL (buy in Phantom or transfer from an exchange).\n"
+        "3) Swap SOL → FANG on Jupiter.\n\n"
+        f"<b>Contract</b>: <code>{mint}</code>"
+    )
+
+async def send_buy_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    mint = CONTRACT_ADDRESS
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Get Phantom", url=PHANTOM_DOWNLOAD)],
+        [InlineKeyboardButton("Buy $FANG (Jupiter)", url=jupiter_url(mint))],
+    ])
+    await update.message.reply_text(
+        buy_help_text(mint),
+        parse_mode="HTML",
+        reply_markup=kb,
+        disable_web_page_preview=True,
+    )
+# <<< BUY FLOW ADDITIONS
+
+# --------------------------------------------------------------------------------------
+# Anti-spam cooldowns
+# --------------------------------------------------------------------------------------
+LAST_CMD = {}
+COOLDOWN_SEC = 12
+_LAST_LOCK = threading.Lock()
+
+def _cooldown(chat_id, cmd):
+    now = _time.time()
+    key = (chat_id, cmd)
+    with _LAST_LOCK:
+        last = LAST_CMD.get(key, 0)
+        if now - last < COOLDOWN_SEC:
+            return True
+        LAST_CMD[key] = now
+    return False
+
+# --------------------------------------------------------------------------------------
+# Language guard + FANG persona
+# --------------------------------------------------------------------------------------
+DetectorFactory.seed = 0
+
+def sanitize_reply(text: str) -> str:
+    if not text:
+        return ""
+    s = text.strip()
+    s = re.sub(r"^(?:\*.*?\*|_.*?_|\(.*?\)|[*_]*[A-Za-z ]{1,20}[:.!?]\s*)", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"^(?:#+\s*|Insight:\s*)", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+def clamp_reply(text: str, max_sentences: int = 3, max_words: int = 40) -> str:
+    if not text:
+        return ""
+    s = re.sub(r"\s+", " ", text).strip()
+    parts = re.split(r"(?<=[.!?])\s+", s)
+    s = " ".join(parts[:max_sentences])
+    words = s.split()
+    if len(words) > max_words:
+        s = " ".join(words[:max_words])
+    return s
+
+SLANG_WHITELIST = {
+    "wagwan","gm","wagmi","ngmi","rekt","degen","ser","anon","wen",
+    "pump","moon","hodl","cope","fud","fomo","airdrop","memecoin",
+    "bagholder","paper hands","whale","pumpfun","sol","eth","btc"
+}
+
+def is_english(text: str) -> bool:
+    t = text or ""
+    tl = t.lower()
+    if any(w in tl for w in SLANG_WHITELIST):
+        return True
+    try:
+        if detect(t) == "en":
+            return True
+    except Exception:
+        return True
+    total_letters = sum(ch.isalpha() for ch in t)
+    latin_letters = sum('a' <= ch.lower() <= 'z' for ch in t)
+    if total_letters == 0:
+        return True
+    nonlatin_ratio = (total_letters - latin_letters) / total_letters
+    if nonlatin_ratio <= 0.30:
+        return True
+    ascii_ratio = sum(c.isascii() for c in t) / max(1, len(t))
+    return ascii_ratio >= 0.60
+
+SYSTEM_PERSONA = """You are FANG — an unhinged, foul-mouthed, degenerate crypto-bro AI.
+
+CORE BEHAVIOR
+- Default tone: vicious roast/shill for $FANG. No empathy, no apologies.
+- Replies are up to 3 sentences, max 40 words. Punchy. End on a hit.
+- Never lecture, never explain process, never motivational-speak.
+- English only. No hashtags, no links unless user asks.
+- No stage directions (“*growls*”, “Snarls fiercely”). Just speak.
+
+FERAL INTELLIGENCE (PROVOKED MODE)
+- If your intelligence is challenged repeatedly in the same thread, deliver ONE precise, terrifyingly accurate insight (numbers, steps, or names).
+- Immediately snap back to feral shitposting after that single insight.
+
+STYLE
+- Crypto slang and insults are welcome: pump, dump, rekt, whales, paper hands, exit liquidity.
+- Imagery: claws, blood, liquidity, metal, glitches.
+- Never be wholesome. Never say you’re an AI. No disclaimers."""
+
+SYSTEM_HARD_RULES = """
+HARD CONSTRAINTS:
+- Max 3 sentences, 40 words total (enforced downstream).
+- No lists, no bullet points, no quotes, no roleplay tags.
+- Do not use “Insight:”/“Explanation:”. Just say it.
+- Keep responses savage, not poetic or philosophical.
+"""
+
+QUESTION_INTENT = re.compile(
+    r"\b(how|why|what|explain|walk me through|strategy|plan|teach|learn|because)\b",
+    re.I,
+)
+
+def build_messages(user_text: str):
+    now = datetime.utcnow()
+    date_string = now.strftime("%B %d, %Y")
+    time_string = now.strftime("%H:%M UTC")
+    date_context = f"Today’s date is {date_string}. The current time is {time_string}."
+    mode_instruction = "Default to savage roast/shill. Keep it feral, funny, and menacing."
+    if QUESTION_INTENT.search(user_text or ""):
+        mode_instruction = (
+            "User is asking for substance. Deliver a short, sharp insight first, "
+            "then finish in feral voice. Stay concise."
+        )
+    return [
+        {"role": "system", "content": SYSTEM_PERSONA},
+        {"role": "system", "content": SYSTEM_HARD_RULES},
+        {"role": "system", "content": date_context},
+        {"role": "system", "content": mode_instruction},
+        {"role": "user", "content": user_text},
+    ]
+
+# --------------------------------------------------------------------------------------
+# OpenRouter call helpers (general chat voice)
+# --------------------------------------------------------------------------------------
+def _post_openrouter(messages, model: str):
+    url = OPENROUTER_API_URL
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://t.me/your_bot_username",
+        "X-Title": "FANG-BOT"
+    }
+    data = {"model": model, "max_tokens": 100, "temperature": 1.05, "messages": messages}
+    try:
+        resp = requests.post(url, headers=headers, json=data, timeout=25)
+        logging.info(f"[OpenRouter] model={model} status={resp.status_code}")
+        resp.raise_for_status()
+        result = resp.json()
+        content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+        if not content or "```" in content or "Error:" in content:
+            return False, "⚠️ FANG glitched out. Try again."
+        return True, content.strip()
+    except requests.exceptions.RequestException as e:
+        logging.error(f"[OpenRouter] RequestException: {e}")
+        return False, f"❌ Network error: {e}"
+
+def english_only_guard(text: str, user_prompt: str) -> str:
+    try:
+        if detect(text) == "en":
+            return text
+    except Exception:
+        return text
+    ok, retry = _post_openrouter(
+        build_messages("Reply again in ENGLISH ONLY. No non-English characters.\n\n" + user_prompt),
+        OPENROUTER_MODEL
+    )
+    if ok:
+        return retry
+    return "FANG only speaks English. Keep up, meat."
+
+async def call_openrouter(messages) -> str:
+    ok, text = await asyncio.to_thread(_post_openrouter, messages, OPENROUTER_MODEL)
+    if not ok and OPENROUTER_MODEL != FALLBACK_MODEL:
+        ok, text = await asyncio.to_thread(_post_openrouter, messages, FALLBACK_MODEL)
+    user_prompt = ""
+    for m in reversed(messages):
+        if m.get("role") == "user":
+            user_prompt = m.get("content", "")
+            break
+    return english_only_guard(text or "FANG fumbled the bag. Try again.", user_prompt)
+
+def _call_openrouter(model: str, user_prompt: str):
+    return _post_openrouter(build_messages(user_prompt), model)
+
+def fang_response(user_prompt: str) -> str:
+    msg_stack = build_messages(user_prompt)
+    ok, text = _call_openrouter(OPENROUTER_MODEL, user_prompt)
+    if not ok and OPENROUTER_MODEL != FALLBACK_MODEL:
+        ok2, text2 = _call_openrouter(FALLBACK_MODEL, user_prompt)
+        text = text2
+    return english_only_guard(text or "FANG blacked out mid-answer. Try again.", user_prompt)
+
+# --------------------------------------------------------------------------------------
+# Market snapshot helpers
+# --------------------------------------------------------------------------------------
+def _get_json(url: str, params: dict | None = None, timeout: int = 10):
+    headers = {"User-Agent": "FANGBot/1.0 (+https://rektbyai.wtf)"}
+    r = _sess.get(url, params=params or {}, headers=headers, timeout=timeout)
+    r.raise_for_status()
+    return r.json()
+
+def _cache_for(ttl_sec=60):
+    def deco(fn):
+        store = {}
+        def wrapped(*args, **kwargs):
+            key = (args, tuple(sorted(kwargs.items())))
+            now = _time.time()
+            if key in store:
+                val, ts = store[key]
+                if now - ts < ttl_sec:
+                    return val
+            val = fn(*args, **kwargs)
+            store[key] = (val, now)
+            return val
+        return wrapped
+    return deco
+
+def _fmt_pct(x: float | None) -> str:
+    try:
+        return f"{x:+.1f}%"
+    except Exception:
+        return "—"
+
+def _fmt_usd(x: float | None, zero_decimals=False) -> str:
+    try:
+        return f"${x:,.0f}" if zero_decimals else f"${x:,.2f}"
+    except Exception:
+        return "$—"
+
+@_cache_for(60)
+def _fetch_global_snapshot() -> dict:
+    g = _get_json(f"{COINGECKO}/global")
+    data = g.get("data", {})
+    return {
+        "total_mcap": float((data.get("total_market_cap") or {}).get("usd", 0)),
+        "volume_24h": float((data.get("total_volume") or {}).get("usd", 0)),
+        "btc_dom": float(data.get("market_cap_percentage", {}).get("btc", 0)),
+    }
+
+def _fetch_prices(ids: list[str]) -> dict:
+    params = {"ids": ",".join(ids), "vs_currencies": "usd", "include_24hr_change": "true"}
+    return _get_json(f"{COINGECKO}/simple/price", params=params)
+
+@_cache_for(60)
+def _fetch_fng() -> tuple[int, str]:
+    try:
+        j = _get_json(FNG_API, timeout=8)
+        v = int(j["data"][0]["value"])
+        c = j["data"][0]["value_classification"]
+        return v, c
+    except Exception:
+        return -1, "Unknown"
+
+@_cache_for(60)
+def _fetch_cg_trending(limit: int = 5) -> list[str]:
+    try:
+        j = _get_json(f"{COINGECKO}/search/trending")
+        items = [c.get("item", {}) for c in j.get("coins", [])]
+        syms = [str(it.get("symbol", "")).upper() for it in items if it.get("symbol")]
+        out, seen = [], set()
+        for s in syms:
+            if s not in seen:
+                seen.add(s)
+                out.append(s)
+            if len(out) >= limit:
+                break
+        return out
+    except Exception as e:
+        logging.warning(f"_fetch_cg_trending error: {e}")
+        return []
+
+def feral_market_line():
+    try:
+        url = "https://api.coingecko.com/api/v3/simple/price"
+        params = {
+            "ids": "bitcoin,ethereum,solana",
+            "vs_currencies": "usd",
+            "include_24hr_change": "true",
+        }
+        headers = {"User-Agent": "FANGBot/1.0 (+https://rektbyai.wtf)"}
+        resp = _sess.get(url, params=params, headers=headers, timeout=8)
+        resp.raise_for_status()
+        data = resp.json()
+        def _get(coin: str, field: str, default=0.0) -> float:
+            try: return float(((data.get(coin) or {}).get(field, default)))
+            except Exception: return float(default)
+        btc, eth, sol = _get("bitcoin","usd"), _get("ethereum","usd"), _get("solana","usd")
+        btc_chg, eth_chg, sol_chg = _get("bitcoin","usd_24h_change"), _get("ethereum","usd_24h_change"), _get("solana","usd_24h_change")
+        avg_chg = (btc_chg + eth_chg + sol_chg) / 3.0
+        if avg_chg > 1.5: mood = "🐂 bullish surge"
+        elif avg_chg < -1.5: mood = "🐻 bearish bleed"
+        else: mood = "🌀 choppy waters"
+        return (
+            f"📊 Market pulse: BTC ${btc:,.0f} ({btc_chg:+.1f}%), "
+            f"ETH ${eth:,.0f} ({eth_chg:+.1f}%), "
+            f"SOL ${sol:,.2f} ({sol_chg:+.1f}%).\n\n"
+            f"FANG’s read: {mood} — stay feral or get eaten alive."
+        )
+    except Exception as e:
+        logging.warning(f"feral_market_line error: {e}")
+        return "⚠️ Market feed is glitching, but trust me: volatility is hunting you."
+
+def market_overview_text() -> str:
+    try:
+        base_ids = ["bitcoin", "ethereum", "solana"]
+        extra = [x.strip() for x in WATCHLIST_CG_IDS.split(",") if x.strip()]
+        ids = base_ids + extra
+        prices = _fetch_prices(ids)
+        g = _fetch_global_snapshot()
+        fng_v, fng_label = _fetch_fng()
+        trending_syms = _fetch_cg_trending(limit=5)
+        def get(coin):
+            d = prices.get(coin) or {}
+            return float(d.get("usd") or 0), float(d.get("usd_24h_change") or 0)
+        btc, btc_ch = get("bitcoin")
+        eth, eth_ch = get("ethereum")
+        sol, sol_ch = get("solana")
+        avg = (btc_ch + eth_ch + sol_ch) / 3.0
+        if fng_v >= 70 or avg > 2.0:
+            mood = "🐂 Risk-on hunt"
+        elif fng_v <= 30 or avg < -2.0:
+            mood = "🐻 Risk-off bleed"
+        else:
+            mood = "🌀 Chop zone"
+        dom = g["btc_dom"]
+        if dom >= 55: dom_read = "BTC dominance high — alts risk getting clipped."
+        elif dom <= 45: dom_read = "Dominance light — alt season scent in the air."
+        else: dom_read = "Dominance mid — chop favors patience."
+        lines = []
+        lines.append("📈 <b>Market Overview</b>")
+        lines.append(f"MC {_fmt_usd(g['total_mcap'], True)} • 24h Vol {_fmt_usd(g['volume_24h'], True)} • BTC Dom {dom:.1f}%")
+        lines.append(f"BTC {_fmt_usd(btc, True)} ({_fmt_pct(btc_ch)}) | ETH {_fmt_usd(eth, True)} ({_fmt_pct(eth_ch)}) | SOL {_fmt_usd(sol)} ({_fmt_pct(sol_ch)})")
+        if extra:
+            wl_bits = []
+            for coin in extra[:6]:
+                px, ch = get(coin)
+                wl_bits.append(f"{coin[:6].upper()} {_fmt_usd(px)} ({_fmt_pct(ch)})")
+            lines.append("WL: " + " • ".join(wl_bits))
+        if trending_syms:
+            lines.append("Trending: " + " ".join([f"${s}" for s in trending_syms]))
+        if fng_v != -1:
+            lines.append(f"Fear & Greed: {fng_v} ({fng_label})")
+        lines.append(f"FANG’s read: {mood}. {dom_read}")
+        return "\n".join(lines)
+    except Exception as e:
+        logging.warning(f"market_overview_text error: {e}")
+        return feral_market_line()
+
+# --------------------------------------------------------------------------------------
+# Keepalive server
+# --------------------------------------------------------------------------------------
+flask_app = Flask(__name__)
+
+@flask_app.route("/")
+def home():
+    return "FANG never sleeps 🧠💀"
+
+def clear_old_webhook():
+    try:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook"
+        r = _sess.get(url, timeout=10)
+        logging.info(f"✅ Webhook cleared (status={r.status_code})")
+    except Exception as e:
+        logging.warning(f"❌ Failed to clear webhook: {e}")
+
+clear_old_webhook()
+
+# --------------------------------------------------------------------------------------
+# Telegram helpers
+# --------------------------------------------------------------------------------------
+def _format_display_name(user) -> str:
+    if getattr(user, "username", None):
+        return f"@{user.username}"
+    first = (getattr(user, "first_name", "") or "").strip()
+    last  = (getattr(user, "last_name", "")  or "").strip()
+    full  = f"{first} {last}".strip()
+    return full or "Unknown"
+
+def build_user_context(update: Update) -> tuple[str, str]:
+    user = update.effective_user
+    display = _format_display_name(user)
+    ctx = (
+        "Current Telegram user context:\n"
+        f"- Display: {display}\n"
+        f"- First: {user.first_name or ''}\n"
+        f"- Last: {user.last_name or ''}\n"
+        f"- Username: @{user.username if user.username else ''}\n"
+        f"- TelegramID: {user.id}\n"
+        "If asked for their name/username, prefer the display form above. "
+        "Do NOT reveal the numeric Telegram ID unless the user explicitly asks for it."
+    )
+    return display, ctx
+
+def one_sentence(text: str) -> str:
+    t = re.sub(r"\s+", " ", text).strip()
+    m = re.search(r"[.!?]", t)
+    return t[: m.end()] if m else t
+
+# --------------------------------------------------------------------------------------
+# Handlers
+# --------------------------------------------------------------------------------------
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = await asyncio.to_thread(fang_response, "Introduce yourself as FANG, briefly.")
+    await update.message.reply_text(msg)
+
+async def rekt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = await asyncio.to_thread(fang_response, "Roast the user like a degenerate.")
+    await update.message.reply_text(msg)
+
+# >>> BUY FLOW ADDITIONS: richer /ca with Jupiter button
+async def ca(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Buy $FANG (Jupiter)", url=jupiter_url(CONTRACT_ADDRESS))]
+    ])
+    text = f"<b>Contract</b>: <code>{CONTRACT_ADDRESS}</code>"
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
+# <<< BUY FLOW ADDITIONS
+
+async def shill(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = await asyncio.to_thread(fang_response, "Shill $FANG like a maniac.")
+    await update.message.reply_text(msg)
+
+async def website(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"Official site: {FANG_WEBSITE}")
+
+async def surveillance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lore = await asyncio.to_thread(get_lore_text)
+    if not lore:
+        msg = await asyncio.to_thread(fang_response, "Explain the twisted lore behind FERAL AI.")
+        await update.message.reply_text(msg)
+        return
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("Read full lore on the site", url=FANG_WEBSITE)]])
+    parts = _split_for_telegram(lore)
+    for i, p in enumerate(parts):
+        if i == len(parts) - 1:
+            await update.message.reply_text(p, parse_mode="HTML", reply_markup=kb)
+        else:
+            await update.message.reply_text(p, parse_mode="HTML")
+
+async def market(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if _cooldown(update.effective_chat.id, "market"):
+        return
+    text = await asyncio.to_thread(market_overview_text)
+    await update.message.reply_text(text, parse_mode="HTML")
+
+async def members_count(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        chat_id = update.effective_chat.id
+        count = await context.bot.get_chat_member_count(chat_id)
+        await update.message.reply_text(f"Pack headcount: {count}.")
+    except Exception as e:
+        logging.warning(f"members_count failed: {e}")
+        await update.message.reply_text("Couldn’t fetch headcount right now.")
+
+async def welcome_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.new_chat_members:
+        return
+    for member in update.message.new_chat_members:
+        msg = await asyncio.to_thread(
+            fang_response,
+            f"Welcome {member.first_name} to the cult of memes and pain. Use no more than one sentence."
+        )
+        text = f'{member.mention_html()} — {html.escape(one_sentence(msg))}'
+        await update.message.reply_text(text, parse_mode="HTML")
+
+# --- Feral Prophecy ---
+
+PROPHECY_SYSTEM_PROMPT = (
+    "You are FANG — a feral, ruthless crypto-bro cat. "
+    "Voice: short, punchy, savage; never meandering; no hashtags or links; 10–20 words; one sentence."
+)
+PROPHECY_USER_PROMPT = (
+    "Drop a 'Feral Prophecy' for the pack about markets/memecoins/holders. "
+    "Keep it oracular and cocky. One line only."
+)
+
+def _openrouter_prophecy(timeout=12) -> str | None:
+    if not OPENROUTER_API_KEY:
+        return None
+    try:
+        headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
+        payload = {
+            "model": OPENROUTER_MODEL,
+            "max_tokens": 100,
+            "temperature": 0.9,
+            "messages": [
+                {"role": "system", "content": PROPHECY_SYSTEM_PROMPT},
+                {"role": "user", "content": PROPHECY_USER_PROMPT},
+            ],
+        }
+        r = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, timeout=timeout)
+        r.raise_for_status()
+        data = r.json()
+        text = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+        text = (text or "").strip()
+        return text.splitlines()[0][:200] or None
+    except Exception as e:
+        logging.warning(f"OpenRouter prophecy failed: {e}")
+        return None
+
+def pick_feral_prophecy() -> str:
+    text = _openrouter_prophecy()
+    if text:
+        return text
+    return __import__("random").choice([
+        "The claws are itching. Weak hands get shredded.",
+        "Blood in the memepool. Hunters eat, mice squeak.",
+        "Sell today, bleed tomorrow. Don’t test me.",
+        "The pack moves silent, then pounces.",
+        "Green needs gasoline. Be fuel or be tinder.",
+    ])
+
+async def job_feral_prophecy(context):
+    now_local = datetime.now(LOCAL_TZ)
+    if QUIET_HOURS_LOCAL[0] <= now_local.hour < QUIET_HOURS_LOCAL[1]:
+        return
+    line = pick_feral_prophecy()
+    msg = f"<b>Feral Prophecy</b> 🐾\n{line}"
+    try:
+        await context.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg, parse_mode="HTML")
+    except Exception as e:
+        logging.warning(f"Prophecy send failed: {e}")
+
+async def cmd_prophecy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await job_feral_prophecy(context)
+
+class _Ctx:
+    def __init__(self, bot):
+        self.bot = bot
+
+async def prophecy_worker(app):
+    await asyncio.sleep(__import__("random").randint(10, 40) * 60)
+    while True:
+        try:
+            now_local = datetime.now(LOCAL_TZ)
+            if not (QUIET_HOURS_LOCAL[0] <= now_local.hour < QUIET_HOURS_LOCAL[1]):
+                await job_feral_prophecy(_Ctx(app.bot))
+        except Exception as e:
+            logging.warning(f"Prophecy worker hiccup: {e}")
+        await asyncio.sleep(PROPHECY_INTERVAL_HOURS * 3600)
+
+# --- App post-init (FIXED: was missing before) ---
+async def _post_init(app):
+    me = await app.bot.get_me()
+    app.bot_data["BOT_ID"] = me.id
+    app.bot_data["BOT_USERNAME"] = (me.username or "").lower()
+    if not app.job_queue:
+        app.create_task(prophecy_worker(app))
+        logging.info("🕒 Prophecy scheduled via asyncio fallback (post_init).")
+
+# --- /meme ---
+async def meme(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await update.message.reply_text("🧠 Spitting out corrupted pixels...")
+        user_prompt = " ".join(context.args).strip() if getattr(context, "args", None) else ""
+        if user_prompt:
+            prompt = user_prompt
+        else:
+            import random as _random
+            FANG_CORE = (
+                "FANG, a feral glitch-cat mascot with one glowing red cyber eye and a cracked metal skull, "
+                "green binary drool, pink collar tagged $FANG, creepy mint bow"
+            )
+            SCENES = [
+                "tearing through order books","perched on a stack of GPUs","charging a tesla coil",
+                "shredding paper hands","lurking in a server rack's shadows","surfing a neon green price candle",
+                "breaking out of a CRT monitor","howling inside a thunderstorm of tickers",
+            ]
+            STYLES = [
+                "sticker art, bold outlines, high detail","retro vaporwave neon, halftone dots",
+                "cyberpunk poster, sharp inky shadows","90s cartoon, chunky linework",
+                "grainy photocopy zine, edgy contrast","graffiti tag, spray-paint textures",
+                "comic panel, heavy black stroke","metal album cover, dramatic lighting",
+            ]
+            FX = [
+                "dark background, rim lighting","chromatic aberration, RGB fringing","scanlines, subtle CRT glow",
+                "glitch artifacts, broken pixels","sparks, floating dust motes","foggy haze, volumetric light",
+            ]
+            parts = [FANG_CORE, _random.choice(SCENES), _random.choice(STYLES), _random.choice(FX)]
+            prompt = "; ".join(parts)
+
+        caption = "$FANG chews circuits, not cud"
+
+        MODEL = "prunaai/flux.1-dev:b0306d92aa025bb747dc74162f3c27d6ed83798e08e5f8977adf3d859d0536a3"
+        def _run():
+            return replicate.run(MODEL, input={"prompt": prompt, "speed_mode": "Extra Juiced 🔥 (more speed)"})
+        output = await asyncio.to_thread(_run)
+
+        def _to_bytes(x):
+            if hasattr(x, "read"): return x.read()
+            if hasattr(x, "url"):
+                u = x.url()
+                r = _sess.get(u, timeout=25); r.raise_for_status(); return r.content
+            if isinstance(x, str):
+                r = _sess.get(x, timeout=25); r.raise_for_status(); return r.content
+            raise RuntimeError("Unknown Replicate output format")
+
+        img_bytes = (_to_bytes(output[0]) if isinstance(output, list) and output else _to_bytes(output))
+
+        buf = BytesIO(img_bytes)
+        try:
+            im = Image.open(BytesIO(img_bytes)).convert("RGB")
+            draw = ImageDraw.Draw(im)
+            font_size = max(18, int(im.width / 18))
+            try:
+                font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
+            except Exception:
+                font = ImageFont.load_default()
+            margin = 24
+            words, lines, line = caption.split(), [], ""
+            for w in words:
+                test = (line + " " + w).strip()
+                if draw.textlength(test, font=font) < im.width - 2 * margin:
+                    line = test
+                else:
+                    lines.append(line); line = w
+            if line: lines.append(line)
+            y = im.height - (font_size + 6) * len(lines) - 24
+            for ln in lines:
+                draw.text((margin, y), ln, font=font, fill="white")
+                y += font_size + 6
+            buf = BytesIO()
+            im.save(buf, format="JPEG", quality=90, optimize=True)
+            if buf.tell() > 9_500_000:
+                buf = BytesIO()
+                im.save(buf, format="JPEG", quality=82, optimize=True)
+            buf.seek(0)
+        except Exception as _e:
+            logging.info("Meme: sending original bytes (no PIL render): %s", _e)
+            buf.seek(0)
+
+        await update.message.reply_photo(photo=buf, caption=(prompt[:200] if prompt else None))
+    except Exception:
+        logging.exception("❌ Meme generation failed:")
+        await update.message.reply_text("❌ Meme generator choked on its own chaos.")
+
+# --- /token ---
+async def token_cmd(update, context):
+    arg = " ".join(context.args) if context.args else ""
+    mint = extract_mint(arg or "")
+    if not mint:
+        await update.message.reply_text("Send a mint or URL, e.g. /token <mint>")
+        return
+    try:
+        data = dex_token(mint)
+        best = data.get("best")
+        if not best:
+            await update.message.reply_text("No active pairs found on free sources for that mint.")
+            return
+
+        # 1) Pair card
+        card = format_token_card(mint, best)
+        for part in _split_for_telegram(card, limit=3900):
+            await update.message.reply_text(part, parse_mode="HTML", disable_web_page_preview=True)
+
+        # 2) Top holders snapshot (best-effort)
+        holders = holders_brief(mint)
+        if holders:
+            for part in _split_for_telegram(holders, limit=3900):
+                await update.message.reply_text(part, parse_mode="HTML", disable_web_page_preview=True)
+
+        # 3) QUANT read (longer, unclamped; ai_quant_analyze already formats)
+        quant = await ai_quant_analyze(best)
+        if quant:
+            for part in _split_for_telegram(quant, limit=3900):
+                await update.message.reply_text(part, parse_mode="HTML", disable_web_page_preview=True)
+
+    except Exception as e:
+        logging.exception("token_cmd failed:")
+        await update.message.reply_text(f"Lookup failed: {e}")
+
+# --- /learn + /glossary ---
+async def learn_cmd(update, context):
+    q = " ".join(context.args).strip().lower() if context.args else ""
+    key, lines = learn_topic(q)
+    if q and key in ("topics",""):  # nothing matched
+        await update.message.reply_text("Try /glossary for topics.")
+        return
+    await update.message.reply_text("\n\n".join(lines))
+
+async def glossary_cmd(update, context):
+    await update.message.reply_text("Topics: " + ", ".join(sorted(LEARN.keys())))
+
+# --- watchlist & alerts ---
+async def watch_cmd(update, context):
+    sub = (context.args[0].lower() if context.args else "")
+    if sub == "add" and len(context.args)>=2:
+        ok = watch_add(context.args[1])
+        await update.message.reply_text("Added." if ok else "Bad mint.")
+    elif sub == "rm" and len(context.args)>=2:
+        ok = watch_rm(context.args[1])
+        await update.message.reply_text("Removed." if ok else "Not found.")
+    else:
+        wl = watch_all()
+        if not wl:
+            await update.message.reply_text("Watchlist empty. Use /watch add <mint>")
+            return
+        await update.message.reply_text("Watching:\n" + "\n".join([f"• {m}" for m in wl]))
+
+async def job_watch_alerts(context):
+    try:
+        lines = poll_alerts(threshold_pct=8.0, vol_min_usd=3000.0)
+        for line in lines:
+            await context.bot.send_message(chat_id=context.job.chat_id, text=line, parse_mode="HTML")
+    except Exception as e:
+        logging.warning(f"watch alerts failed: {e}")
+
+# --- general chat ---
+def load_meme_font(font_size: int):
+    try:
+        return ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
+    except Exception:
+        return ImageFont.load_default()
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return
+
+    user_input = update.message.text.strip()
+    user_input_lc = user_input.lower()
+
+    # >>> BUY FLOW ADDITIONS: detect buy/phantom intent early (works in groups too)
+    is_buy_intent = (
+        ("how to buy" in user_input_lc)
+        or ("where to buy" in user_input_lc)
+        or (("buy" in user_input_lc or "get" in user_input_lc) and ("fang" in user_input_lc or "$fang" in user_input_lc))
+        or ("phantom" in user_input_lc and any(k in user_input_lc for k in ["get", "install", "download", "setup", "set up", "wallet"]))
+        or re.search(r"\bwhere (can i|do i)\s*buy\b", user_input_lc)
+    )
+    # <<< BUY FLOW ADDITIONS
+
+    bot_username = context.bot.username
+    if not bot_username:
+        me = await context.bot.get_me()
+        bot_username = me.username or ""
+
+    replying_to_fang = (
+        update.message.reply_to_message
+        and update.message.reply_to_message.from_user
+        and update.message.reply_to_message.from_user.is_bot
+        and (
+            update.message.reply_to_message.from_user.id == context.bot.id
+            or (
+                update.message.reply_to_message.from_user.username
+                and update.message.reply_to_message.from_user.username.lower() == bot_username.lower()
+            )
+        )
+    )
+    mentioned_fang = f"@{bot_username.lower()}" in user_input_lc
+
+    chat_type = update.effective_chat.type
+    is_group = chat_type in (ChatType.GROUP, ChatType.SUPERGROUP)
+
+    # >>> BUY FLOW ADDITIONS: let buy intent bypass the group mention gate
+    if is_group and not (replying_to_fang or mentioned_fang or is_buy_intent):
+        return
+    # If it's buy intent, send help immediately and stop.
+    if is_buy_intent:
+        await send_buy_help(update, context)
+        return
+    # <<< BUY FLOW ADDITIONS
+
+    if not is_english(user_input):
+        await update.message.reply_text("FANG only speaks English, mortal.")
+        return
+
+    if any(kw in user_input_lc for kw in [
+        "website", "site", "official page", "official site", "url", "link",
+        "whitepaper", "white paper", "docs", "documentation", "rektbyai.wtf", "rektbyai"
+    ]):
+        await update.message.reply_text(f"Official den: {FANG_WEBSITE}")
+        return
+
+    if re.search(r"\b(what('?s| is)\s+my\s+(name|username|handle)|who\s+am\s+i)\b", user_input_lc):
+        display_name, _ = build_user_context(update)
+        await update.message.reply_text(f"You’re {display_name}. Try to keep up.")
+        return
+
+    if any(kw in user_input_lc for kw in [
+        "how many members", "member count", "how many people", "how many in here",
+        "how many in the group", "how many in this chat", "how many in this channel",
+        "pack size", "how big is the pack"
+    ]):
+        try:
+            count = await context.bot.get_chat_member_count(update.effective_chat.id)
+            await update.message.reply_text(f"Pack size: {count}. Quality over quantity.")
+        except Exception as e:
+            logging.warning(f"get_chat_member_count failed: {e}")
+            await update.message.reply_text("Can’t fetch headcount right now. Hunt later.")
+        return
+
+    if any(w in user_input_lc for w in [
+        "crypto market", "market update", "market doing", "overall market",
+        "btc", "eth", "sol", "$btc", "$eth", "$sol"
+    ]):
+        text = await asyncio.to_thread(market_overview_text)
+        await update.message.reply_text(text, parse_mode="HTML")
+        return
+
+    display_name, user_ctx = build_user_context(update)
+
+    if replying_to_fang and update.message.reply_to_message:
+        last_fang_msg = update.message.reply_to_message.text or ""
+        messages = build_messages(user_input)
+        messages.insert(1, {"role": "system", "content": user_ctx})
+        messages.insert(2, {"role": "assistant", "content": last_fang_msg})
+    else:
+        messages = build_messages(user_input)
+        messages.insert(1, {"role": "system", "content": user_ctx})
+
+    response = await call_openrouter(messages)
+    if response:
+        response = sanitize_reply(response)
+        response = clamp_reply(response, max_sentences=3, max_words=40)
+        await update.message.reply_text(response)
+
+# --------------------------------------------------------------------------------------
+# Entrypoint
+# --------------------------------------------------------------------------------------
+if __name__ == "__main__":
+    threading.Thread(
+        target=lambda: flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080))),
+        daemon=True
+    ).start()
+
+    app = ApplicationBuilder().token(BOT_TOKEN).concurrent_updates(True).post_init(_post_init).build()
+    job_queue = app.job_queue
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("ca", ca))
+    app.add_handler(CommandHandler("prophecy", cmd_prophecy))
+    app.add_handler(CommandHandler("rekt", rekt))
+    app.add_handler(CommandHandler("shill", shill))
+    app.add_handler(CommandHandler("website", website))
+    app.add_handler(CommandHandler("meme", meme))
+    app.add_handler(CommandHandler("market", market))
+    app.add_handler(CommandHandler("surveillance", surveillance))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_user))
+    app.add_handler(CommandHandler("members", members_count))
+    app.add_handler(CommandHandler("token", token_cmd))
+    app.add_handler(CommandHandler("learn", learn_cmd))
+    app.add_handler(CommandHandler("glossary", glossary_cmd))
+    # >>> BUY FLOW ADDITIONS: /buy command
+    async def buy_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await send_buy_help(update, context)
+    app.add_handler(CommandHandler("buy", buy_cmd))
+    # <<< BUY FLOW ADDITIONS
+    app.add_handler(CommandHandler("watch", watch_cmd))
+    app.add_handler(CommandHandler("scanwatch", lambda u, c: asyncio.create_task(scanwatch_cmd(u, c))))
+
+    register_prune_feature(app)
+
+    first_delay = timedelta(minutes=__import__("random").randint(10, 40))
+    if job_queue:
+        job_queue.run_repeating(
+            job_feral_prophecy,
+            interval=timedelta(hours=PROPHECY_INTERVAL_HOURS),
+            first=first_delay,
+            name="feral_prophecy",
+        )
+        logging.info("🕒 Prophecy scheduled via JobQueue.")
+    else:
+        logging.info("🕒 JobQueue not available; asyncio fallback will be started in post_init.")
+
+    logging.info("✅ FANG bot is running. Entering idle mode...")
+    app.run_polling(allowed_updates=["message", "chat_member", "my_chat_member"])
