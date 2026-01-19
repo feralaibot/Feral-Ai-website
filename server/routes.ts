@@ -2,7 +2,12 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
-import { checkHoldings, fetchAllowedAssets, fetchWalletReputation, verifySignature } from "./solana";
+import {
+  checkHoldings,
+  fetchAllowedAssets,
+  fetchWalletReputation,
+  verifySignature,
+} from "./solana";
 import {
   createSession,
   extractNonceFromMessage,
@@ -20,16 +25,25 @@ export async function registerRoutes(
   // Seed data on startup
   await storage.seedData();
 
+  // ===== TOOLS =====
   app.get(api.tools.list.path, async (req, res) => {
     const tools = await storage.getTools();
     res.json(tools);
   });
 
+  // Back-compat alias: allow /tools as well as /api/tools
+  app.get("/tools", async (req, res) => {
+    const tools = await storage.getTools();
+    res.json(tools);
+  });
+
+  // ===== LORE =====
   app.get(api.lore.list.path, async (req, res) => {
     const lore = await storage.getLore();
     res.json(lore);
   });
 
+  // ===== WALLET AUTH =====
   app.get(api.wallet.nonce.path, async (req, res) => {
     const publicKey = api.wallet.nonce.query.parse(req.query).publicKey;
     const payload = issueNonce(publicKey);
@@ -61,6 +75,7 @@ export async function registerRoutes(
     res.json({ ...verification, session });
   });
 
+  // ===== WALLET DATA =====
   app.get(api.wallet.assets.path, requireVerifiedWallet, async (req, res) => {
     const publicKey = api.wallet.assets.query.parse(req.query).publicKey;
     if (req.verifiedWallet?.publicKey !== publicKey) {
