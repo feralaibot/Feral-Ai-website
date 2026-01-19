@@ -8,6 +8,15 @@ import "./env";
 const app = express();
 const httpServer = createServer(app);
 
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught exception", error);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled rejection", reason);
+});
+
 const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
